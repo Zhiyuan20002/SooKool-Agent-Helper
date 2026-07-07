@@ -1,0 +1,45 @@
+{
+  "name": "sookool-agent-helper",
+  "version": "0.1.0",
+  "description": "SooKool-Agent-Helper - local agent asset manager for skills and workflows",
+  "main": "./out/main/index.js",
+  "author": "SooKool",
+  "private": true,
+  "scripts": {
+    "format": "prettier --write .",
+    "lint": "npm run typecheck",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "npm run typecheck && electron-vite build"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@heroui/react": "^3.2.2",
+    "@heroui/styles": "^3.2.2",
+    "@lobehub/icons": "^5.10.1",
+    "@vitejs/plugin-react": "^5.1.1",
+    "electron": "^39.2.6",
+    "electron-vite": "^5.0.0",
+    "lucide-react": "^0.561.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "skills": "^1.5.15",
+    "zustand": "^5.0.9"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@tailwindcss/postcss": "^4.3.2",
+    "@types/node": "^22.19.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "postcss": "^8.5.16",
+    "prettier": "^3.7.4",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.6"
+  }
+}
