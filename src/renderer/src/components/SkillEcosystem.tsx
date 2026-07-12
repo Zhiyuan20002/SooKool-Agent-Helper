@@ -5,7 +5,6 @@ import {
   Anthropic,
   HermesAgent,
   HuggingFace,
-  LobeHub,
   ModelScope,
   Nvidia,
   OpenAI,
@@ -55,15 +54,14 @@ import type {
   MarketSkillPreview,
   MarketSkillResult,
   MarketSource,
-  MarketPalette,
-  LobeHubStatus
+  MarketPalette
 } from '@/types/ecosystem'
 
 type PreviewTab = 'overview' | 'content' | 'files'
 type SortMode = 'featured' | 'name' | 'source'
 const rendererCatalogMaxAgeMs = 15 * 60 * 1000
 const remoteCatalogBatchSize = 100
-const remoteMarketKinds = new Set(['skillhub', 'redskill', 'modelscope', 'clawhub', 'lobehub'])
+const remoteMarketKinds = new Set(['skillhub', 'redskill', 'modelscope', 'clawhub'])
 
 const fallbackSources: MarketSource[] = [
   {
@@ -175,16 +173,6 @@ const fallbackSources: MarketSource[] = [
     palette: 'matisse',
     builtin: true,
     enabled: true
-  },
-  {
-    id: 'builtin-lobehub-skills',
-    name: 'LobeHub Skills',
-    source: 'https://lobehub.com/skills',
-    description: 'LobeHub Agent Skills marketplace powered by the official CLI.',
-    kind: 'lobehub',
-    palette: 'macaron',
-    builtin: true,
-    enabled: true
   }
 ]
 
@@ -232,10 +220,6 @@ export function SkillMarket(): React.JSX.Element {
   const [catalogBatchPage, setCatalogBatchPage] = useState(1)
   const [paginationMode, setPaginationMode] = useState<'page' | 'cursor'>('page')
   const [hasMore, setHasMore] = useState(false)
-  const [showLobeSetup, setShowLobeSetup] = useState(false)
-  const [lobeName, setLobeName] = useState('SooKool Agent Helper')
-  const [lobeDescription, setLobeDescription] = useState('SooKool 桌面端中的 Agent Skills 市场客户端。')
-  const [lobeSetupBusy, setLobeSetupBusy] = useState(false)
 
   useEffect(() => {
     void initializeMarket()
@@ -249,7 +233,7 @@ export function SkillMarket(): React.JSX.Element {
     let cancelled = false
     const timer = setTimeout(() => {
       const apiSources = sources.filter((source) =>
-        source.enabled && remoteMarketKinds.has(source.kind) && source.kind !== 'lobehub'
+        source.enabled && remoteMarketKinds.has(source.kind)
       )
       void (async () => {
         for (const source of apiSources) {
@@ -499,25 +483,6 @@ export function SkillMarket(): React.JSX.Element {
       if (requestId === previewRequestRef.current) setError(formatError(error))
     } finally {
       if (requestId === previewRequestRef.current) setPreviewLoading(false)
-    }
-  }
-
-  async function registerLobeHub(): Promise<void> {
-    setLobeSetupBusy(true)
-    setError(null)
-    try {
-      const status = await window.aiHelper.invoke<LobeHubStatus>('market:registerLobehub', {
-        name: lobeName,
-        description: lobeDescription,
-        source: 'sookool-agent-helper'
-      })
-      if (!status.ready) throw new Error(status.error || 'LobeHub 注册未完成。')
-      setShowLobeSetup(false)
-      await loadCatalog('builtin-lobehub-skills', true)
-    } catch (error) {
-      setError(formatError(error))
-    } finally {
-      setLobeSetupBusy(false)
     }
   }
 
@@ -788,7 +753,6 @@ export function SkillMarket(): React.JSX.Element {
         <div className={error ? 'market-message error' : 'market-message success'}>
           {error ? <AlertTriangle size={15} /> : <Check size={15} />}
           <span>{error || notice}</span>
-          {error && selectedSource?.kind === 'lobehub' && !error.includes('市场认证服务异常') && <Button size="sm" variant="secondary" onPress={() => setShowLobeSetup(true)}>设置 LobeHub</Button>}
           <button type="button" onClick={() => { setError(null); setNotice(null) }}><X size={14} /></button>
         </div>
       )}
@@ -830,21 +794,6 @@ export function SkillMarket(): React.JSX.Element {
       )}
       {!loading && paginationMode === 'page' && pageCount > 1 && (
         <MarketPagination page={page} total={effectiveTotal} pageSize={pageSize} copy={copy} onChange={(next) => void changePage(next)} />
-      )}
-
-      {showLobeSetup && (
-        <div className="lobe-setup-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowLobeSetup(false) }}>
-          <section className="lobe-setup-panel" role="dialog" aria-modal="true" aria-labelledby="lobe-setup-title">
-            <div className="lobe-setup-heading">
-              <div><h2 id="lobe-setup-title">设置 LobeHub Skills</h2><p>创建本机市场身份后，官方 CLI 才能搜索和下载 Skill。</p></div>
-              <button type="button" aria-label="关闭" onClick={() => setShowLobeSetup(false)}><X size={16} /></button>
-            </div>
-            <label>显示名称<input value={lobeName} onChange={(event) => setLobeName(event.target.value)} maxLength={80} /></label>
-            <label>身份描述<textarea value={lobeDescription} onChange={(event) => setLobeDescription(event.target.value)} maxLength={500} rows={4} /></label>
-            <p className="lobe-setup-note">确认后会通过 LobeHub 官方 CLI 创建身份并在本机保存凭据。应用不会读取或复制令牌。</p>
-            <div className="lobe-setup-actions"><Button variant="secondary" onPress={() => setShowLobeSetup(false)}>取消</Button><Button variant="primary" isDisabled={lobeSetupBusy || lobeName.trim().length < 2 || lobeDescription.trim().length < 10} onPress={() => void registerLobeHub()}>{lobeSetupBusy ? '设置中…' : '确认设置'}</Button></div>
-          </section>
-        </div>
       )}
 
     </ScrollShadow>
@@ -969,9 +918,6 @@ function MarketSourceIcon({ source }: { source: MarketSource }): React.JSX.Eleme
     case 'builtin-clawhub':
       icon = <OpenClaw.Color {...iconProps} />
       break
-    case 'builtin-lobehub-skills':
-      icon = <LobeHub.Color {...iconProps} />
-      break
     case 'builtin-vercel-agent-skills':
       icon = <Vercel {...iconProps} />
       break
@@ -1014,7 +960,6 @@ function MarketBrandGlyph({ sourceId }: { sourceId: string }): React.JSX.Element
     case 'builtin-redskill': return <RedSkillLogo monochrome />
     case 'builtin-modelscope-skills': return <ModelScope {...iconProps} />
     case 'builtin-clawhub': return <OpenClaw {...iconProps} />
-    case 'builtin-lobehub-skills': return <LobeHub {...iconProps} />
     default: return <FolderGit2 {...iconProps} />
   }
 }

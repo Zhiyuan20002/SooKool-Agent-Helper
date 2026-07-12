@@ -239,16 +239,6 @@ const builtinSources: MarketSource[] = [
     palette: 'matisse',
     builtin: true,
     enabled: true
-  },
-  {
-    id: 'builtin-lobehub-skills',
-    name: 'LobeHub Skills',
-    source: 'https://lobehub.com/skills',
-    description: 'LobeHub Agent Skills 市场，通过官方 CLI 提供搜索、分页与安装。',
-    kind: 'lobehub',
-    palette: 'macaron',
-    builtin: true,
-    enabled: true
   }
 ]
 
@@ -296,14 +286,6 @@ export class SkillMarketManager {
       }))
   }
 
-  getLobeHubStatus(): Promise<{ ready: boolean; profile?: Record<string, unknown>; error?: string }> {
-    return this.loader.getLobeHubStatus()
-  }
-
-  registerLobeHub(input: { name: string; description: string; source: string }): Promise<{ ready: boolean; profile?: Record<string, unknown>; error?: string }> {
-    return this.loader.registerLobeHub(input)
-  }
-
   addSource(input: MarketAddSourceInput): MarketSource[] {
     const source = input.source.trim()
     if (!source) throw new Error('市场源不能为空。')
@@ -348,7 +330,7 @@ export class SkillMarketManager {
   async listSkills(input: MarketListSkillsInput): Promise<MarketSkillResult> {
     const source = this.resolveSource(input)
     try {
-      if (['skillhub', 'redskill', 'modelscope', 'clawhub', 'lobehub'].includes(source.kind)) {
+      if (['skillhub', 'redskill', 'modelscope', 'clawhub'].includes(source.kind)) {
         const result = await this.loader.listPage(
           source.source,
           source.kind,

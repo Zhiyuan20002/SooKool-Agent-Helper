@@ -36,7 +36,7 @@ export interface MarketSource {
   name: string
   source: string
   description: string
-  kind: 'skills-sh' | 'skillhub' | 'redskill' | 'modelscope' | 'clawhub' | 'lobehub' | 'git' | 'local'
+  kind: 'skills-sh' | 'skillhub' | 'redskill' | 'modelscope' | 'clawhub' | 'git' | 'local'
   palette: MarketPalette
   builtin: boolean
   enabled: boolean
@@ -109,12 +109,6 @@ export interface MarketSkillResult {
   pageSize?: number
   paginationMode?: 'page' | 'cursor'
   hasMore?: boolean
-}
-
-export interface LobeHubStatus {
-  ready: boolean
-  profile?: { name?: string; description?: string; source?: string }
-  error?: string
 }
 
 export interface MarketInstallResult {

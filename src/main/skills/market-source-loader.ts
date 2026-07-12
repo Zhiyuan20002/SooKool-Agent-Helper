@@ -1,5 +1,4 @@
 import { createHash } from 'crypto'
-import { createRequire } from 'module'
 import { spawn } from 'child_process'
 import {
   existsSync,
@@ -19,7 +18,7 @@ import { MarketCatalogCache, type CatalogCacheRead } from './market-catalog-cach
 import { extractCompatibleZip } from './archive-extractor'
 import { mergeCatalogRecords } from './market-catalog-utils'
 
-export type MarketSourceKind = 'skills-sh' | 'skillhub' | 'redskill' | 'modelscope' | 'clawhub' | 'lobehub' | 'git' | 'local'
+export type MarketSourceKind = 'skills-sh' | 'skillhub' | 'redskill' | 'modelscope' | 'clawhub' | 'git' | 'local'
 
 export interface CatalogSkillRecord {
   name: string
@@ -72,48 +71,18 @@ const maxPreviewFiles = 160
 const cacheMaxAgeMs = 5 * 60 * 1000
 const catalogMemoryMaxAgeMs = 15 * 60 * 1000
 const maxMarketArchiveBytes = 32 * 1024 * 1024
-const maxCliOutputBytes = 2 * 1024 * 1024
-const moduleRequire = createRequire(import.meta.url)
-const lobeHubCliPath = moduleRequire.resolve('@lobehub/market-cli/dist/cli.js')
 
 export class MarketSourceLoader {
   private catalogCache = new Map<string, { records: CatalogSkillRecord[]; cachedAt: number }>()
   private catalogRequests = new Map<string, { promise: Promise<CatalogSkillRecord[]>; refresh: boolean }>()
   private modelScopeMaterializations = new Map<string, Promise<string>>()
-  private lobeHubMaterializations = new Map<string, Promise<string>>()
   private redSkillDefaultCatalogs = new Map<string, { records: CatalogSkillRecord[]; cachedAt: number }>()
   private redSkillDefaultRequests = new Map<string, Promise<CatalogSkillRecord[]>>()
   private clawHubCursors = new Map<string, Map<number, string | undefined>>()
   private catalogDiskCache: MarketCatalogCache
-  private lobeHubRunnerPath: string
 
   constructor(private cacheRoot: string) {
     this.catalogDiskCache = new MarketCatalogCache(join(cacheRoot, 'catalogs'))
-    this.lobeHubRunnerPath = join(cacheRoot, 'lobehub-cli-runner.mjs')
-    mkdirSync(cacheRoot, { recursive: true })
-    writeFileSync(this.lobeHubRunnerPath, "delete process.versions.electron\nawait import(process.env.LOBEHUB_MARKET_CLI_ENTRY)\n", { mode: 0o600 })
-  }
-
-  async getLobeHubStatus(): Promise<{ ready: boolean; profile?: Record<string, unknown>; error?: string }> {
-    try {
-      const output = await runLobeHubCli(this.lobeHubRunnerPath, ['profile', 'get', '--output', 'json'])
-      return { ready: true, profile: parseJsonOutput(output) }
-    } catch (error) {
-      const message = normalizeLoaderError(error)
-      if (/no credentials|register|尚未设置|市场身份/i.test(message)) return { ready: false }
-      return { ready: false, error: message }
-    }
-  }
-
-  async registerLobeHub(input: { name: string; description: string; source: string }): Promise<{ ready: boolean; profile?: Record<string, unknown>; error?: string }> {
-    const name = input.name.trim()
-    const description = input.description.trim()
-    const source = input.source.trim()
-    if (name.length < 2 || name.length > 80) throw new Error('LobeHub 名称需为 2–80 个字符。')
-    if (description.length < 10 || description.length > 500) throw new Error('LobeHub 描述需为 10–500 个字符。')
-    if (!/^[a-z][a-z0-9-]{1,30}$/.test(source)) throw new Error('LobeHub 来源标识无效。')
-    await runLobeHubCli(this.lobeHubRunnerPath, ['register', '--name', name, '--description', description, '--source', source])
-    return this.getLobeHubStatus()
   }
 
   readCachedCatalog(source: string, kind: MarketSourceKind): CatalogCacheRead | null {
@@ -178,7 +147,6 @@ export class MarketSourceLoader {
     const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)))
     if (kind === 'skillhub') return listSkillHubCatalog(source, safePage, safePageSize, query)
     if (kind === 'clawhub') return this.listClawHubPage(source, safePage, safePageSize, query)
-    if (kind === 'lobehub') return listLobeHubCatalog(this.lobeHubRunnerPath, safePage, safePageSize, query)
     if (kind === 'redskill') {
       if (query.trim()) return listRedSkillCatalog(source, safePage, safePageSize, query)
       const sourceKey = source.trim().toLowerCase()
@@ -280,10 +248,6 @@ export class MarketSourceLoader {
       const directory = await this.materializeClawHubSkill(source, skillName, refresh)
       return readCatalogPreview(directory, directory)
     }
-    if (kind === 'lobehub') {
-      const directory = await this.materializeLobeHubSkill(source, skillName, refresh)
-      return readCatalogPreview(directory, directory)
-    }
     const resolved = await this.resolveSource(source, kind, refresh)
     const selected = findCatalogSkillDirectory(resolved, skillName)
     if (!selected) throw new Error(`市场源中未找到 Skill：${skillName}`)
@@ -301,7 +265,6 @@ export class MarketSourceLoader {
     if (kind === 'redskill') return this.materializeRedSkill(source, skillName, refresh)
     if (kind === 'modelscope') return this.materializeModelScopeSkill(source, skillName, refresh)
     if (kind === 'clawhub') return this.materializeClawHubSkill(source, skillName, refresh)
-    if (kind === 'lobehub') return this.materializeLobeHubSkill(source, skillName, refresh)
     const resolved = await this.resolveSource(source, kind, refresh)
     const selected = findCatalogSkillDirectory(resolved, skillName)
     if (!selected) throw new Error(`市场源中未找到 Skill：${skillName}`)
@@ -337,43 +300,6 @@ export class MarketSourceLoader {
       rmSync(staging, { recursive: true, force: true })
     }
     return target
-  }
-
-  private async materializeLobeHubSkill(source: string, skillName: string, refresh: boolean): Promise<string> {
-    normalizeLobeHubSource(source)
-    const identifier = normalizeMarketplaceIdentifier(skillName)
-    const key = createHash('sha256').update(`lobehub:${identifier}`).digest('hex').slice(0, 20)
-    const parent = join(this.cacheRoot, `lobehub-${key}`)
-    const target = join(parent, identifier)
-    if (!refresh && existsSync(join(target, 'SKILL.md'))) return target
-    const existing = this.lobeHubMaterializations.get(key)
-    if (existing) return existing
-    const request = (async () => {
-      const staging = `${parent}.staging`
-      rmSync(staging, { recursive: true, force: true })
-      mkdirSync(staging, { recursive: true })
-      try {
-        await runLobeHubCli(this.lobeHubRunnerPath, ['skills', 'install', identifier, '--dir', staging])
-        const installed = existsSync(join(staging, identifier, 'SKILL.md'))
-          ? join(staging, identifier)
-          : findSkillDirectories(staging)[0]
-        if (!installed) throw new Error('LobeHub 安装包中没有有效的 SKILL.md。')
-        rmSync(parent, { recursive: true, force: true })
-        renameDirectory(staging, parent)
-        const resolved = installed === join(staging, identifier)
-          ? join(parent, identifier)
-          : join(parent, relative(staging, installed))
-        return resolved
-      } finally {
-        rmSync(staging, { recursive: true, force: true })
-      }
-    })()
-    this.lobeHubMaterializations.set(key, request)
-    try {
-      return await request
-    } finally {
-      this.lobeHubMaterializations.delete(key)
-    }
   }
 
   async materializeSkillHubSkill(
@@ -681,91 +607,6 @@ function mapClawHubItem(item: unknown): CatalogSkillRecord[] {
   }]
 }
 
-async function listLobeHubCatalog(runnerPath: string, page: number, pageSize: number, query: string): Promise<CatalogPage> {
-  const args = ['skills', 'search', '--page', String(page), '--page-size', String(pageSize), '--locale', 'zh-CN', '--output', 'json']
-  if (query.trim()) args.push('--q', query.trim())
-  const raw = parseJsonOutput(await runLobeHubCli(runnerPath, args))
-  const items = Array.isArray(raw.items) ? raw.items : []
-  const records = items.flatMap((item) => {
-    if (!item || typeof item !== 'object') return []
-    const skill = item as Record<string, unknown>
-    const identifier = String(skill.identifier || '').trim()
-    if (!identifier) return []
-    const tags = Array.isArray(skill.tags) ? skill.tags.map(String) : []
-    return [{
-      name: String(skill.name || identifier),
-      description: String(skill.description || '暂无描述'),
-      author: String(skill.author || identifier.split('-')[0] || 'LobeHub'),
-      version: String(skill.version || '') || undefined,
-      category: String(skill.category || '效率工具'),
-      tags: tags.slice(0, 6),
-      sourcePath: identifier,
-      skillDirectory: '',
-      hasScripts: false
-    }]
-  })
-  return {
-    records,
-    total: Number(raw.totalCount) || records.length,
-    page: Number(raw.currentPage) || page,
-    pageSize: Number(raw.pageSize) || pageSize,
-    paginationMode: 'page',
-    hasMore: page < (Number(raw.totalPages) || page)
-  }
-}
-
-function runLobeHubCli(runnerPath: string, args: string[]): Promise<string> {
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(process.execPath, [runnerPath, ...args], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', LOBEHUB_MARKET_CLI_ENTRY: lobeHubCliPath },
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-    let stdout = ''
-    let stderr = ''
-    let settled = false
-    const finish = (callback: () => void): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeout)
-      clearTimeout(forceKill)
-      callback()
-    }
-    const forceKill = setTimeout(() => finish(() => reject(new Error('LobeHub CLI 执行超时。'))), 63_000)
-    const timeout = setTimeout(() => {
-      child.kill('SIGTERM')
-      setTimeout(() => child.kill('SIGKILL'), 2_000).unref()
-    }, 60_000)
-    timeout.unref()
-    forceKill.unref()
-    const append = (current: string, chunk: Buffer): string => {
-      if (Buffer.byteLength(current) + chunk.length > maxCliOutputBytes) {
-        child.kill('SIGKILL')
-        finish(() => reject(new Error('LobeHub CLI 输出超过安全上限。')))
-        return current
-      }
-      return current + chunk.toString()
-    }
-    child.stdout.on('data', (chunk: Buffer) => (stdout = append(stdout, chunk)))
-    child.stderr.on('data', (chunk: Buffer) => (stderr = append(stderr, chunk)))
-    child.on('error', (error) => finish(() => reject(error)))
-    child.on('close', (code) => {
-      finish(() => {
-        if (code === 0) resolvePromise(stdout.trim())
-        else {
-          const detail = (stderr || stdout).trim()
-          reject(new Error(
-            /invalid_token/i.test(detail)
-              ? 'LobeHub 当前拒绝官方 CLI 刚签发的访问令牌，属于市场认证服务异常。请稍后重试，重新设置通常无法解决。'
-              : /no credentials found/i.test(detail)
-                ? 'LobeHub 尚未设置，请先创建本机市场身份。'
-                : detail || `LobeHub CLI 退出码：${code}`
-          ))
-        }
-      })
-    })
-  })
-}
-
 async function readResponseWithLimit(response: Response, limit: number, label: string): Promise<Buffer> {
   const declared = Number(response.headers.get('content-length') || 0)
   if (declared > limit) throw new Error(`${label}超过 ${Math.floor(limit / 1024 / 1024)} MB 安全上限。`)
@@ -786,20 +627,9 @@ async function readResponseWithLimit(response: Response, limit: number, label: s
   return Buffer.concat(chunks, size)
 }
 
-function parseJsonOutput(output: string): Record<string, unknown> {
-  const start = output.indexOf('{')
-  const end = output.lastIndexOf('}')
-  if (start < 0 || end < start) throw new Error('LobeHub CLI 没有返回有效 JSON。')
-  return JSON.parse(output.slice(start, end + 1)) as Record<string, unknown>
-}
-
 function throwRemoteHttpError(label: string, status: number): never {
   if (status === 429) throw new Error(`${label}受到限流，请稍后重试。`)
   throw new Error(`${label}失败：HTTP ${status}`)
-}
-
-function normalizeLoaderError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 async function listRedSkillCatalog(source: string, page = 1, pageSize = 100, query = ''): Promise<CatalogPage> {
@@ -940,12 +770,6 @@ function normalizeClawHubSource(source: string): void {
   }
 }
 
-function normalizeLobeHubSource(source: string): void {
-  if (!/^https:\/\/(?:www\.)?lobehub\.com\/skills\/?$/i.test(source.trim())) {
-    throw new Error('LobeHub 来源必须使用官方 Skills 地址。')
-  }
-}
-
 function normalizeModelScopeIdentifier(value: string): string {
   const identifier = value.trim()
   if (!/^@?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i.test(identifier)) {
@@ -1037,14 +861,7 @@ export function inferMarketSourceKind(source: string): MarketSourceKind {
   if (/^https:\/\/redskill\.xiaohongshu\.net\/?$/i.test(source.trim())) return 'redskill'
   if (/^https:\/\/(?:www\.)?modelscope\.cn\/skills\/?$/i.test(source.trim())) return 'modelscope'
   if (/^https:\/\/(?:www\.)?clawhub\.ai\/?$/i.test(source.trim())) return 'clawhub'
-  if (/^https:\/\/(?:www\.)?lobehub\.com\/skills\/?$/i.test(source.trim())) return 'lobehub'
   return looksLikeLocalPath(source) ? 'local' : 'git'
-}
-
-function normalizeMarketplaceIdentifier(value: string): string {
-  const identifier = value.trim()
-  if (!/^[a-z0-9][a-z0-9._-]{1,191}$/i.test(identifier)) throw new Error('市场 Skill 标识无效。')
-  return identifier
 }
 
 function readCatalogSkill(directory: string, sourceRoot: string): CatalogSkillRecord {

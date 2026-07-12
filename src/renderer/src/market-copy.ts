@@ -113,7 +113,7 @@ export function localizeSkillWarning(message: string, language: AppLanguage): st
 }
 
 const sourceBrands: Record<string, string> = {
-  'builtin-vercel-agent-skills':'Vercel Labs', 'builtin-anthropic-skills':'Anthropic', 'builtin-openclaw-skills':'OpenClaw', 'builtin-hermes-skills':'Hermes', 'builtin-openai-skills':'OpenAI', 'builtin-huggingface-skills':'Hugging Face', 'builtin-nvidia-skills':'NVIDIA', 'builtin-tencent-skillhub':'Tencent SkillHub', 'builtin-redskill':'REDnote Red Skill', 'builtin-modelscope-skills':'ModelScope Skills', 'builtin-clawhub':'ClawHub', 'builtin-lobehub-skills':'LobeHub Skills'
+  'builtin-vercel-agent-skills':'Vercel Labs', 'builtin-anthropic-skills':'Anthropic', 'builtin-openclaw-skills':'OpenClaw', 'builtin-hermes-skills':'Hermes', 'builtin-openai-skills':'OpenAI', 'builtin-huggingface-skills':'Hugging Face', 'builtin-nvidia-skills':'NVIDIA', 'builtin-tencent-skillhub':'Tencent SkillHub', 'builtin-redskill':'REDnote Red Skill', 'builtin-modelscope-skills':'ModelScope Skills', 'builtin-clawhub':'ClawHub'
 }
 export function localizedSourceName(id: string, fallback: string, language: AppLanguage): string {
   const brand=sourceBrands[id]; if(!brand) return fallback

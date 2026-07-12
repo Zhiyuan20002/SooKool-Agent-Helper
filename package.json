@@ -26,7 +26,6 @@
     "@heroui/react": "^3.2.2",
     "@heroui/styles": "^3.2.2",
     "@lobehub/icons": "^5.10.1",
-    "@lobehub/market-cli": "0.0.38",
     "@vitejs/plugin-react": "^5.1.1",
     "adm-zip": "^0.5.17",
     "electron-vite": "^5.0.0",

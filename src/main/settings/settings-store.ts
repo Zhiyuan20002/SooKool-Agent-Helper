@@ -23,7 +23,7 @@ export interface SavedMarketSource {
   name: string
   source: string
   description?: string
-  kind?: 'skills-sh' | 'skillhub' | 'redskill' | 'modelscope' | 'clawhub' | 'lobehub' | 'git' | 'local'
+  kind?: 'skills-sh' | 'skillhub' | 'redskill' | 'modelscope' | 'clawhub' | 'git' | 'local'
   palette?: MarketPalette
   enabled?: boolean
 }
