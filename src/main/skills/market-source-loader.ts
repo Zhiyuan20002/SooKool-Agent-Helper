@@ -753,9 +753,13 @@ function runLobeHubCli(runnerPath: string, args: string[]): Promise<string> {
         if (code === 0) resolvePromise(stdout.trim())
         else {
           const detail = (stderr || stdout).trim()
-          reject(new Error(/no credentials found/i.test(detail)
-            ? 'LobeHub 尚未设置，请先创建本机市场身份。'
-            : detail || `LobeHub CLI 退出码：${code}`))
+          reject(new Error(
+            /invalid_token/i.test(detail)
+              ? 'LobeHub 当前拒绝官方 CLI 刚签发的访问令牌，属于市场认证服务异常。请稍后重试，重新设置通常无法解决。'
+              : /no credentials found/i.test(detail)
+                ? 'LobeHub 尚未设置，请先创建本机市场身份。'
+                : detail || `LobeHub CLI 退出码：${code}`
+          ))
         }
       })
     })

@@ -788,7 +788,7 @@ export function SkillMarket(): React.JSX.Element {
         <div className={error ? 'market-message error' : 'market-message success'}>
           {error ? <AlertTriangle size={15} /> : <Check size={15} />}
           <span>{error || notice}</span>
-          {error && selectedSource?.kind === 'lobehub' && <Button size="sm" variant="secondary" onPress={() => setShowLobeSetup(true)}>设置 LobeHub</Button>}
+          {error && selectedSource?.kind === 'lobehub' && !error.includes('市场认证服务异常') && <Button size="sm" variant="secondary" onPress={() => setShowLobeSetup(true)}>设置 LobeHub</Button>}
           <button type="button" onClick={() => { setError(null); setNotice(null) }}><X size={14} /></button>
         </div>
       )}
