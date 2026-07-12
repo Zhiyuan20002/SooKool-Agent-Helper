@@ -16,6 +16,7 @@ import extractZip from 'extract-zip'
 import { parseSkillMarkdown } from './skill-parser'
 import { MarketCatalogCache, type CatalogCacheRead } from './market-catalog-cache'
 import { extractCompatibleZip } from './archive-extractor'
+import { mergeCatalogRecords } from './market-catalog-utils'
 
 export type MarketSourceKind = 'skills-sh' | 'skillhub' | 'redskill' | 'modelscope' | 'git' | 'local'
 
@@ -72,6 +73,8 @@ export class MarketSourceLoader {
   private catalogCache = new Map<string, { records: CatalogSkillRecord[]; cachedAt: number }>()
   private catalogRequests = new Map<string, { promise: Promise<CatalogSkillRecord[]>; refresh: boolean }>()
   private modelScopeMaterializations = new Map<string, Promise<string>>()
+  private redSkillDefaultCatalogs = new Map<string, { records: CatalogSkillRecord[]; cachedAt: number }>()
+  private redSkillDefaultRequests = new Map<string, Promise<CatalogSkillRecord[]>>()
   private catalogDiskCache: MarketCatalogCache
 
   constructor(private cacheRoot: string) {
@@ -133,15 +136,56 @@ export class MarketSourceLoader {
     kind: MarketSourceKind,
     page: number,
     pageSize: number,
-    query = ''
+    query = '',
+    refresh = false
   ): Promise<CatalogPage> {
     const safePage = Math.max(1, Math.floor(page))
     const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)))
     if (kind === 'skillhub') return listSkillHubCatalog(source, safePage, safePageSize, query)
-    if (kind === 'redskill') return listRedSkillCatalog(source, safePage, safePageSize, query)
+    if (kind === 'redskill') {
+      if (query.trim()) return listRedSkillCatalog(source, safePage, safePageSize, query)
+      const sourceKey = source.trim().toLowerCase()
+      if (refresh) {
+        await this.redSkillDefaultRequests.get(sourceKey)?.catch(() => undefined)
+        this.redSkillDefaultCatalogs.delete(sourceKey)
+      }
+      const records = await this.loadRedSkillDefaultCatalog(source)
+      const start = (safePage - 1) * safePageSize
+      return {
+        records: records.slice(start, start + safePageSize),
+        total: records.length,
+        page: safePage,
+        pageSize: safePageSize
+      }
+    }
     if (kind === 'modelscope') return listModelScopeCatalog(source, safePage, safePageSize, query)
     const records = await this.list(source, kind)
     return { records, total: records.length, page: 1, pageSize: records.length || safePageSize }
+  }
+
+  private async loadRedSkillDefaultCatalog(source: string): Promise<CatalogSkillRecord[]> {
+    const sourceKey = source.trim().toLowerCase()
+    const cached = this.redSkillDefaultCatalogs.get(sourceKey)
+    if (cached && Date.now() - cached.cachedAt < catalogMemoryMaxAgeMs) return cached.records
+    const running = this.redSkillDefaultRequests.get(sourceKey)
+    if (running) return running
+
+    const request = Promise.all([
+      listAllRedSkillMatches(source, 'skill'),
+      listAllRedSkillMatches(source, '技能')
+    ])
+      .then((groups) => {
+        const records = mergeCatalogRecords(groups.flat())
+        this.redSkillDefaultCatalogs.set(sourceKey, { records, cachedAt: Date.now() })
+        return records
+      })
+      .finally(() => {
+        if (this.redSkillDefaultRequests.get(sourceKey) === request) {
+          this.redSkillDefaultRequests.delete(sourceKey)
+        }
+      })
+    this.redSkillDefaultRequests.set(sourceKey, request)
+    return request
   }
 
   private rememberCatalog(key: string, value: { records: CatalogSkillRecord[]; cachedAt: number }): void {
@@ -476,6 +520,43 @@ async function listRedSkillCatalog(source: string, page = 1, pageSize = 100, que
     }]
   })
   return { records, total: Number(data.total) || records.length, page, pageSize }
+}
+
+async function listAllRedSkillMatches(source: string, query: string): Promise<CatalogSkillRecord[]> {
+  const first = await loadRedSkillPage(source, 1, 100, query)
+  const remainingPages = Math.max(0, Math.ceil(first.total / first.pageSize) - 1)
+  if (!remainingPages) return first.records
+  const remaining = await mapWithConcurrency(
+    Array.from({ length: remainingPages }, (_, index) => index + 2),
+    3,
+    (page) => loadRedSkillPage(source, page, first.pageSize, query)
+  )
+  return [first, ...remaining].flatMap((result) => result.records)
+}
+
+async function loadRedSkillPage(source: string, page: number, pageSize: number, query: string): Promise<CatalogPage> {
+  try {
+    return await listRedSkillCatalog(source, page, pageSize, query)
+  } catch {
+    return listRedSkillCatalog(source, page, pageSize, query)
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let cursor = 0
+  async function worker(): Promise<void> {
+    while (cursor < items.length) {
+      const index = cursor++
+      results[index] = await task(items[index])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()))
+  return results
 }
 
 async function listModelScopeCatalog(source: string, page = 1, pageSize = 100, query = ''): Promise<CatalogPage> {

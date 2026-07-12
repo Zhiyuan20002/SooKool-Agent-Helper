@@ -324,7 +324,8 @@ export class SkillMarketManager {
           source.kind,
           input.page || 1,
           input.pageSize || 100,
-          input.query || ''
+          input.query || '',
+          Boolean(input.refresh)
         )
         return {
           skills: this.mapCatalogSkills(source, result.records),
