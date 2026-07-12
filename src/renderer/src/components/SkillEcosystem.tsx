@@ -682,6 +682,7 @@ export function SkillMarket(): React.JSX.Element {
             key={source.id}
             type="button"
             className={selectedSourceId === source.id ? 'active' : ''}
+            aria-current={selectedSourceId === source.id ? 'true' : undefined}
             onMouseEnter={() => scheduleSourcePreload(source)}
             onMouseLeave={() => cancelSourcePreload(source.id)}
             onFocus={() => scheduleSourcePreload(source)}
@@ -699,7 +700,7 @@ export function SkillMarket(): React.JSX.Element {
       <div className="market-category-bar">
         <div className="market-categories">
           {categories.map((category) => (
-            <button key={category} type="button" className={activeCategory === category ? 'active' : ''} onClick={() => setActiveCategory(category)}>
+            <button key={category} type="button" className={activeCategory === category ? 'active' : ''} aria-pressed={activeCategory === category} onClick={() => setActiveCategory(category)}>
               {localizeMarketCategory(category, language)}
             </button>
           ))}
@@ -821,7 +822,7 @@ function MarketCard({ skill, palette, language, query, colorIndex, onPreview }: 
   const sourceName = localizedSourceName(skill.sourceId, skill.sourceName, language)
   const category = localizeMarketCategory(skill.category, language)
   return (
-    <article className={`market-card tone-card-${colorIndex}`} style={marketPaletteStyle(palette)} role="button" tabIndex={0} onClick={onPreview} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onPreview() } }}>
+    <article className={`market-card tone-card-${colorIndex}`} style={marketPaletteStyle(palette)} role="button" aria-label={`${copy.preview}: ${skill.name}`} tabIndex={0} onClick={onPreview} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onPreview() } }}>
       <div className={`market-card-cover tone-${colorIndex}`}>
         <span className="market-card-initials">{skill.name.slice(0, 2).toUpperCase()}</span>
         <span className="market-card-watermark"><MarketBrandGlyph sourceId={skill.sourceId} /></span>
@@ -955,6 +956,7 @@ function MarketSkillDetail({
   const [showInstall, setShowInstall] = useState(false)
   const [selectedFile, setSelectedFile] = useState<MarketPreviewFile | null>(null)
   const [fileView, setFileView] = useState<'preview' | 'source'>('preview')
+  const backButtonRef = useRef<HTMLButtonElement>(null)
   const fileTree = useMemo(() => buildMarketFileTree(preview?.files || []), [preview?.files])
 
   useEffect(() => {
@@ -973,12 +975,22 @@ function MarketSkillDetail({
 
   useEffect(() => setFileView('preview'), [selectedFile?.relativePath])
 
+  useEffect(() => {
+    backButtonRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [skill.id])
+
   return (
     <div className="market-detail-page" style={marketPaletteStyle(palette)}>
       <header className="detail-header market-detail-header">
         <div className="detail-title-row">
           <div className="market-detail-navigation">
             <Button
+              ref={backButtonRef}
               className="market-detail-back"
               aria-label={copy.back}
               isIconOnly
@@ -1003,15 +1015,34 @@ function MarketSkillDetail({
         </div>
       </header>
 
-      <nav className="preview-tabs market-detail-tabs">
+      <nav className="preview-tabs market-detail-tabs" role="tablist" aria-label={skill.name}>
         {([['overview', copy.overview], ['content', copy.content], ['files', marketText(copy.fileTab, { count: preview?.files.length ?? '' })]] as Array<[PreviewTab, string]>).map(([id, label]) => (
-          <button key={id} type="button" className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>
+          <button
+            key={id}
+            id={`market-tab-${id}`}
+            type="button"
+            role="tab"
+            aria-controls={`market-panel-${id}`}
+            aria-selected={tab === id}
+            tabIndex={tab === id ? 0 : -1}
+            className={tab === id ? 'active' : ''}
+            onClick={() => setTab(id)}
+            onKeyDown={(event) => {
+              const tabs: PreviewTab[] = ['overview', 'content', 'files']
+              const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+              if (!offset) return
+              event.preventDefault()
+              const next = tabs[(tabs.indexOf(id) + offset + tabs.length) % tabs.length]
+              setTab(next)
+              document.getElementById(`market-tab-${next}`)?.focus()
+            }}
+          >{label}</button>
         ))}
       </nav>
 
       {error && <div className="market-message error market-detail-message"><AlertTriangle size={15} /><span>{error}</span></div>}
 
-      <ScrollShadow className="market-detail-content" size={24}>
+      <ScrollShadow id={`market-panel-${tab}`} className="market-detail-content" role="tabpanel" aria-labelledby={`market-tab-${tab}`} size={24}>
           {loading && <div className="preview-loading"><Spinner color="accent" /><span>{copy.reading}</span></div>}
           {!loading && !preview && <div className="preview-loading"><AlertTriangle size={28} /><span>{copy.unavailable}</span></div>}
           {preview && tab === 'overview' && (
@@ -1100,7 +1131,7 @@ function MarketFileTreeList({ nodes, selectedPath, onSelect, depth = 0 }: { node
       <MarketFileTreeList nodes={node.children || []} selectedPath={selectedPath} onSelect={onSelect} depth={depth + 1} />
     </div>
   ) : (
-    <button key={node.relativePath} type="button" style={{ paddingLeft: 10 + depth * 14 }} className={selectedPath === node.relativePath ? 'active' : ''} onClick={() => node.file && onSelect(node.file)}>
+    <button key={node.relativePath} type="button" aria-current={selectedPath === node.relativePath ? 'true' : undefined} style={{ paddingLeft: 10 + depth * 14 }} className={selectedPath === node.relativePath ? 'active' : ''} onClick={() => node.file && onSelect(node.file)}>
       {node.file?.kind === 'image' ? <FileText size={15} /> : node.file?.kind === 'script' ? <FileCode2 size={15} /> : <FileText size={15} />}
       <span>{node.name}</span>
     </button>
@@ -1158,7 +1189,7 @@ function InstallPanel({ skill, onCancel, onInstalled, onError }: { skill: Market
 
   return (
     <div className="install-panel">
-      <div className="install-panel-heading"><div><strong>{copyText.chooseLocation}</strong><span>{copyText.multiTarget}</span></div><button type="button" onClick={onCancel}><X size={15} /></button></div>
+      <div className="install-panel-heading"><div><strong>{copyText.chooseLocation}</strong><span>{copyText.multiTarget}</span></div><button type="button" aria-label={copyText.clear} onClick={onCancel}><X size={15} /></button></div>
       <ScrollShadow className="install-targets" size={20}>
         {targets.map((target) => (
           <label key={target.id} className={selected.has(target.id) ? 'selected' : ''}>
@@ -1171,11 +1202,11 @@ function InstallPanel({ skill, onCancel, onInstalled, onError }: { skill: Market
         {!targets.length && <div className="install-empty">{copyText.noTargets}</div>}
       </ScrollShadow>
       <div className="install-options">
-        <div className="install-segmented"><button type="button" className={scope === 'global' ? 'active' : ''} onClick={() => setScope('global')}>{copyText.global}</button><button type="button" className={scope === 'project' ? 'active' : ''} onClick={() => setScope('project')}>{copyText.project}</button></div>
+        <div className="install-segmented"><button type="button" aria-pressed={scope === 'global'} className={scope === 'global' ? 'active' : ''} onClick={() => setScope('global')}>{copyText.global}</button><button type="button" aria-pressed={scope === 'project'} className={scope === 'project' ? 'active' : ''} onClick={() => setScope('project')}>{copyText.project}</button></div>
         {scope === 'project' && <select className="project-picker" value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">{copyText.chooseProject}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name} — {project.path}</option>)}</select>}
         <label className="copy-option"><input type="checkbox" checked={copy} onChange={(event) => setCopy(event.target.checked)} /><span><strong>{copyText.copy}</strong><small>{copyText.copyHint}</small></span></label>
       </div>
-      <Button variant="primary" isDisabled={!selected.size || running || (scope === 'project' && !projectId)} onPress={() => void install()}>{running ? <RefreshCw size={16} className="spin" /> : <PackageCheck size={16} />}{running ? copyText.installing : marketText(copyText.installApps, { count: selected.size })}</Button>
+      <div role="status" aria-live="polite"><Button variant="primary" isDisabled={!selected.size || running || (scope === 'project' && !projectId)} onPress={() => void install()}>{running ? <RefreshCw size={16} className="spin" /> : <PackageCheck size={16} />}{running ? copyText.installing : marketText(copyText.installApps, { count: selected.size })}</Button></div>
     </div>
   )
 }
