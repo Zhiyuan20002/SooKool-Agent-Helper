@@ -61,6 +61,7 @@ function createWindow(): void {
     icon: iconPath,
     title: getAppDisplayName(resolveAppLanguage(settingsStore.getAppPreferences().language, app.getLocale())),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    backgroundColor: process.platform === 'darwin' ? '#00000000' : undefined,
     trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 16 } : undefined,
     vibrancy: process.platform === 'darwin' ? 'sidebar' : undefined,
     visualEffectState: process.platform === 'darwin' ? 'active' : undefined,

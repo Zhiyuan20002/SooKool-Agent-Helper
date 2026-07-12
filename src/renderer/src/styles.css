@@ -27,7 +27,7 @@ body,
 body {
   overflow: hidden;
   color: var(--text);
-  background: var(--window);
+  background: transparent;
   font-family:
     -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', Arial,
     sans-serif;
@@ -61,7 +61,7 @@ select {
 .app-shell {
   height: 100%;
   display: flex;
-  background: var(--content);
+  background: transparent;
 }
 
 .sidebar {
@@ -73,8 +73,8 @@ select {
   border-right: 0.5px solid var(--hairline);
   background: var(--sidebar);
   box-shadow: inset -1px 0 0 var(--edge-light);
-  backdrop-filter: blur(46px) saturate(1.8);
-  -webkit-backdrop-filter: blur(46px) saturate(1.8);
+  backdrop-filter: blur(5px) saturate(1.7);
+  -webkit-backdrop-filter: blur(5px) saturate(1.7);
   transition:
     width 180ms ease,
     flex-basis 180ms ease,

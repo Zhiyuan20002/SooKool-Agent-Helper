@@ -3,7 +3,7 @@
   color-scheme: light;
   --window: #f3f2f0;
   --content: #ffffff;
-  --sidebar: rgba(246, 245, 243, 0.62);
+  --sidebar: rgba(246, 245, 243, 0.3);
   --panel: #f7f7f8;
   --panel-strong: #efeff1;
   --control: rgba(255, 255, 255, 0.82);
@@ -62,7 +62,7 @@
     color-scheme: dark;
     --window: #111113;
     --content: #18181b;
-    --sidebar: rgba(28, 28, 31, 0.72);
+    --sidebar: rgba(28, 28, 31, 0.46);
     --panel: #202024;
     --panel-strong: #2a2a2e;
     --control: rgba(255, 255, 255, 0.08);
@@ -121,7 +121,7 @@
   color-scheme: dark;
   --window: #111113;
   --content: #18181b;
-  --sidebar: rgba(28, 28, 31, 0.72);
+  --sidebar: rgba(28, 28, 31, 0.46);
   --panel: #202024;
   --panel-strong: #2a2a2e;
   --control: rgba(255, 255, 255, 0.08);

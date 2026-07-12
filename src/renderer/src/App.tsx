@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Spinner } from '@heroui/react'
+import { Button, Spinner, useTheme } from '@heroui/react'
 import { BookText, PanelLeftClose, PanelLeftOpen, Settings, Settings2, Store } from 'lucide-react'
 import { SkillLibrary } from '@/components/SkillLibrary'
 import { resolveAppLanguage, translate } from '@/i18n'
@@ -22,6 +22,7 @@ export function App(): React.JSX.Element {
   const { initialized, initialize, currentView, setCurrentView, skills, preferences } =
     useAppStore()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const { setTheme } = useTheme(preferences.themeMode)
   const t = (
     key: Parameters<typeof translate>[1],
     replacements?: Parameters<typeof translate>[2]
@@ -34,10 +35,8 @@ export function App(): React.JSX.Element {
   useEffect(() => window.aiHelper.onNavigate(setCurrentView), [setCurrentView])
 
   useEffect(() => {
-    const root = document.documentElement
-    if (preferences.themeMode === 'system') root.removeAttribute('data-theme')
-    else root.dataset.theme = preferences.themeMode
-  }, [preferences.themeMode])
+    setTheme(preferences.themeMode)
+  }, [preferences.themeMode, setTheme])
 
   useEffect(() => {
     const language = resolveAppLanguage(preferences.language)
