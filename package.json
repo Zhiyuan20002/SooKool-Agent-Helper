@@ -1,11 +1,12 @@
 {
   "name": "sookool-agent-helper",
   "version": "0.1.0",
-  "description": "SooKool-Agent-Helper - local agent asset manager for skills and workflows",
+  "description": "SooKool Agent Helper - local agent assistant for skills and workflows",
   "main": "./out/main/index.js",
   "author": "SooKool",
   "private": true,
   "scripts": {
+    "test": "node --experimental-strip-types --test src/main/resources/resource-manager.test.ts src/main/settings/settings-store.test.ts src/main/skills/archive-extractor.test.ts src/main/skills/market-catalog-cache.test.ts src/main/skills/project-discovery.test.ts src/main/skills/project-discovery-manager.test.ts src/main/skills/project-system-index.test.ts src/main/skills/skill-filesystem.test.ts src/main/skills/skill-topology.test.ts src/renderer/src/markdown-parser.test.ts src/renderer/src/market-load-utils.test.ts src/renderer/src/market-palettes.test.ts src/renderer/src/market-search-utils.test.ts src/renderer/src/skill-library-tree.test.ts",
     "format": "prettier --write .",
     "lint": "npm run typecheck",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -13,7 +14,11 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
-    "build": "npm run typecheck && electron-vite build"
+    "build": "npm run typecheck && electron-vite build",
+    "benchmark:market": "node scripts/run-market-benchmark.mjs",
+    "pack": "npm run build && electron-builder --dir",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -22,20 +27,25 @@
     "@heroui/styles": "^3.2.2",
     "@lobehub/icons": "^5.10.1",
     "@vitejs/plugin-react": "^5.1.1",
-    "electron": "^39.2.6",
+    "adm-zip": "^0.5.17",
     "electron-vite": "^5.0.0",
+    "extract-zip": "^2.0.1",
     "lucide-react": "^0.561.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "skills": "^1.5.15",
+    "yaml": "^2.9.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@tailwindcss/postcss": "^4.3.2",
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.19.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "electron": "^39.2.6",
+    "electron-builder": "^26.15.3",
     "postcss": "^8.5.16",
     "prettier": "^3.7.4",
     "tailwindcss": "^4.3.2",

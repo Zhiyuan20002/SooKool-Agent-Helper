@@ -2,6 +2,7 @@ import { existsSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { spawn } from 'child_process'
+import type { ApplicationRule, ProjectRegistration } from './skill-topology'
 
 export interface SkillAgentAdapter {
   id: string
@@ -203,6 +204,39 @@ export function listSkillApplicationRoots(cwd = process.cwd()): SkillApplication
       }
     })
     .filter((entry) => entry.installed)
+}
+
+export function listBuiltinApplicationRules(
+  projects: ProjectRegistration[] = [],
+  cwd = process.cwd()
+): ApplicationRule[] {
+  return agentCatalog
+    .filter((entry) => {
+      const globalInstalled = entry.globalPath
+        ? existsSync(expandPath(entry.globalPath))
+        : false
+      const detected = entry.detectPaths.some((path) => existsSync(resolveDetectPath(path, cwd)))
+      const projectInstalled = projects.some((project) => {
+        const hasSkills = existsSync(join(project.path, entry.projectPath))
+        const detectedInProject = entry.detectPaths.some((path) =>
+          !path.startsWith('~/') && !path.startsWith('/') && existsSync(resolveDetectPath(path, project.path))
+        )
+        return detectedInProject || (entry.detectPaths.length === 0 && hasSkills)
+      })
+      return globalInstalled || detected || projectInstalled
+    })
+    .map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      source: 'builtin' as const,
+      detectionPaths: [...entry.detectPaths],
+      systemSkillPaths: entry.globalPath ? [expandPath(entry.globalPath)] : [],
+      projectSkillPaths: [entry.projectPath]
+    }))
+}
+
+export function isBuiltinApplicationId(id: string): boolean {
+  return agentCatalog.some((application) => application.id === id)
 }
 
 export function runSkillsCommand(

@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Spinner } from '@heroui/react'
-import { BookText, PanelLeftClose, PanelLeftOpen, Settings, Store } from 'lucide-react'
+import { BookText, PanelLeftClose, PanelLeftOpen, Settings, Settings2, Store } from 'lucide-react'
 import { SkillLibrary } from '@/components/SkillLibrary'
-import { translate } from '@/i18n'
+import { resolveAppLanguage, translate } from '@/i18n'
 import { useAppStore, type ViewType } from '@/stores/app-store'
-import sookoolLogo from './assets/sookool-app-icon.png'
+import sookoolLogo from './assets/sookool-app-icon-ui.png'
+import sookoolLogoDark from './assets/sookool-app-icon-ui-dark.png'
+import sookoolWordmark from './assets/sookool-wordmark.png'
 
 const navItems: Array<{
   id: ViewType
@@ -13,7 +15,7 @@ const navItems: Array<{
 }> = [
   { id: 'local', labelKey: 'nav.local', icon: BookText },
   { id: 'market', labelKey: 'nav.market', icon: Store },
-  { id: 'settings', labelKey: 'nav.settings', icon: Settings }
+  { id: 'skill-settings', labelKey: 'nav.skillSettings', icon: Settings2 }
 ]
 
 export function App(): React.JSX.Element {
@@ -29,11 +31,20 @@ export function App(): React.JSX.Element {
     if (!initialized) void initialize()
   }, [initialized, initialize])
 
+  useEffect(() => window.aiHelper.onNavigate(setCurrentView), [setCurrentView])
+
   useEffect(() => {
     const root = document.documentElement
     if (preferences.themeMode === 'system') root.removeAttribute('data-theme')
     else root.dataset.theme = preferences.themeMode
   }, [preferences.themeMode])
+
+  useEffect(() => {
+    const language = resolveAppLanguage(preferences.language)
+    document.title = t('app.title')
+    document.documentElement.lang = language
+    document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr'
+  }, [preferences.language])
 
   if (!initialized) {
     return (
@@ -49,10 +60,13 @@ export function App(): React.JSX.Element {
       <aside className="sidebar drag-region">
         <div className="traffic-space" />
         <div className="brand no-drag">
-          <img className="brand-mark" src={sookoolLogo} alt="SooKool-Agent-Helper" />
+          <span className="brand-mark" aria-hidden="true">
+            <img className="brand-mark-light" src={sookoolLogo} alt="" />
+            <img className="brand-mark-dark" src={sookoolLogoDark} alt="" />
+          </span>
           <div className="brand-copy">
-            <strong>SooKool</strong>
-            <span>Agent Helper</span>
+            <img className="brand-wordmark" src={sookoolWordmark} alt="SooKool" />
+            <span>{t('app.subtitle')}</span>
           </div>
           <Button
             className="sidebar-toggle"
@@ -85,6 +99,11 @@ export function App(): React.JSX.Element {
             )
           })}
         </nav>
+        <div className="sidebar-footer no-drag">
+          <Button className="nav-button" aria-label={t('nav.settings')} fullWidth variant={currentView === 'settings' ? 'tertiary' : 'ghost'} onPress={() => setCurrentView('settings')}>
+            <Settings size={20} /><span className="nav-label">{t('nav.settings')}</span>
+          </Button>
+        </div>
       </aside>
 
       <section className="main-panel">

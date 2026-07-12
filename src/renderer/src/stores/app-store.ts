@@ -1,8 +1,19 @@
 import { create } from 'zustand'
 import type { AppMetrics, AppPreferences } from '@/i18n'
-import type { SkillBackupRecord, SkillDetail, SkillRoot, SkillSummary } from '@/types/skills'
+import type {
+  SkillApplication,
+  SkillBackupRecord,
+  SkillCatalogSnapshot,
+  SkillDetail,
+  ProjectDiscoveryStatus,
+  SkillProject,
+  SkillRoot,
+  SkillSummary
+} from '@/types/skills'
 
-export type ViewType = 'market' | 'local' | 'settings'
+let removeCatalogChangedListener: (() => void) | null = null
+
+export type ViewType = 'market' | 'local' | 'skill-settings' | 'settings'
 
 interface CreateSkillForm {
   rootId: string
@@ -18,14 +29,20 @@ interface AppState {
   setCurrentView: (view: ViewType) => void
 
   skillRoots: SkillRoot[]
+  applications: SkillApplication[]
+  projects: SkillProject[]
   skills: SkillSummary[]
   selectedSkill: SkillDetail | null
   backups: SkillBackupRecord[]
   search: string
   rootFilter: string
   issueFilter: 'all' | 'issues'
+  libraryPerspective: 'application' | 'project'
   preferences: AppPreferences
   appMetrics: AppMetrics | null
+  projectDiscovery: ProjectDiscoveryStatus
+  projectScanRoots: string[]
+  projectScanRunning: boolean
   loading: boolean
   saving: boolean
   error: string | null
@@ -33,17 +50,25 @@ interface AppState {
   initialize: () => Promise<void>
   loadAppMetrics: () => Promise<void>
   updatePreferences: (preferences: Partial<AppPreferences>) => Promise<void>
-  refreshSkills: () => Promise<void>
+  refreshSkills: (mode?: 'quick' | 'deep') => Promise<void>
+  cancelProjectScan: () => Promise<void>
+  addProjectScanRoot: () => Promise<void>
+  removeProjectScanRoot: (path: string) => Promise<void>
   selectSkill: (path: string) => Promise<void>
   updateSelectedContent: (content: string) => void
   saveSelectedSkill: () => Promise<void>
   deleteSelectedSkill: () => Promise<void>
   revealSelectedSkill: () => Promise<void>
   addSkillRoot: () => Promise<void>
+  addProject: () => Promise<void>
+  removeProject: (id: string) => Promise<void>
+  saveApplicationRule: (rule: SkillApplication) => Promise<void>
+  removeApplicationRule: (id: string) => Promise<void>
   createSkill: (form: CreateSkillForm) => Promise<void>
   setSearch: (search: string) => void
   setRootFilter: (rootId: string) => void
   setIssueFilter: (filter: 'all' | 'issues') => void
+  setLibraryPerspective: (perspective: 'application' | 'project') => void
   clearError: () => void
 }
 
@@ -53,18 +78,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   setCurrentView: (view) => set({ currentView: view }),
 
   skillRoots: [],
+  applications: [],
+  projects: [],
   skills: [],
   selectedSkill: null,
   backups: [],
   search: '',
   rootFilter: 'all',
   issueFilter: 'all',
+  libraryPerspective: 'application',
   preferences: {
     themeMode: 'system',
     language: 'zh-CN',
     autoScanOnStart: true
   },
   appMetrics: null,
+  projectDiscovery: {
+    phase: 'idle', mode: null, discoveredProjects: 0, scannedDirectories: 0,
+    truncatedRoots: [], completedAt: null
+  },
+  projectScanRoots: [],
+  projectScanRunning: false,
   loading: false,
   saving: false,
   error: null,
@@ -73,26 +107,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       set({ loading: true })
       const preferences = await window.aiHelper.invoke<AppPreferences>('settings:get')
-      const [skillRoots, skills, backups, appMetrics] = await Promise.all([
-        window.aiHelper.invoke<SkillRoot[]>('skillRoot:list'),
-        preferences.autoScanOnStart
-          ? window.aiHelper.invoke<SkillSummary[]>('skill:list')
-          : Promise.resolve([]),
+      const [catalog, backups, appMetrics, projectScanRoots] = await Promise.all([
+        window.aiHelper.invoke<SkillCatalogSnapshot>('skillCatalog:get', {
+          refresh: preferences.autoScanOnStart
+        }),
         window.aiHelper.invoke<SkillBackupRecord[]>('backup:list'),
-        window.aiHelper.invoke<AppMetrics>('app:metrics')
+        window.aiHelper.invoke<AppMetrics>('app:metrics'),
+        window.aiHelper.invoke<string[]>('projectScanRoot:list').catch(() => [])
       ])
       set({
         preferences,
-        skillRoots,
-        skills,
+        skillRoots: catalog.roots,
+        applications: catalog.applications,
+        projects: catalog.projects,
+        skills: preferences.autoScanOnStart ? catalog.skills : [],
         backups,
         appMetrics,
-        selectedSkill: skills[0]
-          ? await window.aiHelper.invoke<SkillDetail>('skill:read', skills[0].path)
+        projectDiscovery: catalog.discovery ?? get().projectDiscovery,
+        projectScanRoots,
+        selectedSkill: preferences.autoScanOnStart && catalog.skills[0]
+          ? await window.aiHelper.invoke<SkillDetail>('skill:read', catalog.skills[0].path)
           : null,
         initialized: true,
         loading: false
       })
+      removeCatalogChangedListener?.()
+      removeCatalogChangedListener = window.aiHelper.onSkillCatalogChanged?.((value) => {
+        const catalog = value as SkillCatalogSnapshot
+        set({
+          skillRoots: catalog.roots,
+          applications: catalog.applications,
+          projects: catalog.projects,
+          skills: catalog.skills,
+          projectDiscovery: catalog.discovery ?? get().projectDiscovery
+        })
+      }) ?? null
     } catch (error) {
       set({ initialized: true, loading: false, error: String(error) })
     }
@@ -119,26 +168,49 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  refreshSkills: async () => {
+  refreshSkills: async (mode = 'quick') => {
     try {
-      set({ loading: true, error: null })
-      const [skillRoots, skills, backups] = await Promise.all([
-        window.aiHelper.invoke<SkillRoot[]>('skillRoot:list'),
-        window.aiHelper.invoke<SkillSummary[]>('skill:list'),
+      set({ loading: true, projectScanRunning: true, error: null })
+      const [catalog, backups] = await Promise.all([
+        window.aiHelper.invoke<SkillCatalogSnapshot>('skillCatalog:get', { refresh: true, mode }),
         window.aiHelper.invoke<SkillBackupRecord[]>('backup:list')
       ])
       const selectedPath = get().selectedSkill?.path
       const nextSelected =
-        selectedPath && skills.some((skill) => skill.path === selectedPath)
+        selectedPath && catalog.skills.some((skill) => skill.path === selectedPath)
           ? await window.aiHelper.invoke<SkillDetail>('skill:read', selectedPath)
-          : skills[0]
-            ? await window.aiHelper.invoke<SkillDetail>('skill:read', skills[0].path)
+          : catalog.skills[0]
+            ? await window.aiHelper.invoke<SkillDetail>('skill:read', catalog.skills[0].path)
             : null
 
-      set({ skillRoots, skills, backups, selectedSkill: nextSelected, loading: false })
+      set({
+        skillRoots: catalog.roots,
+        applications: catalog.applications,
+        projects: catalog.projects,
+        skills: catalog.skills,
+        backups,
+        selectedSkill: nextSelected,
+        projectDiscovery: catalog.discovery ?? get().projectDiscovery,
+        projectScanRunning: false,
+        loading: false
+      })
     } catch (error) {
-      set({ loading: false, error: String(error) })
+      set({ loading: false, projectScanRunning: false, error: String(error) })
     }
+  },
+
+  cancelProjectScan: async () => {
+    await window.aiHelper.invoke('projectDiscovery:cancel')
+  },
+
+  addProjectScanRoot: async () => {
+    const projectScanRoots = await window.aiHelper.invoke<string[]>('projectScanRoot:add')
+    set({ projectScanRoots })
+  },
+
+  removeProjectScanRoot: async (path) => {
+    const projectScanRoots = await window.aiHelper.invoke<string[]>('projectScanRoot:remove', path)
+    set({ projectScanRoots })
   },
 
   selectSkill: async (path) => {
@@ -221,6 +293,44 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  addProject: async () => {
+    try {
+      set({ loading: true, error: null })
+      const catalog = await window.aiHelper.invoke<SkillCatalogSnapshot | null>('project:add')
+      if (catalog) set({ skillRoots: catalog.roots, applications: catalog.applications, projects: catalog.projects, skills: catalog.skills })
+      set({ loading: false })
+    } catch (error) {
+      set({ loading: false, error: String(error) })
+    }
+  },
+
+  removeProject: async (id) => {
+    try {
+      const catalog = await window.aiHelper.invoke<SkillCatalogSnapshot>('project:remove', id)
+      set({ skillRoots: catalog.roots, applications: catalog.applications, projects: catalog.projects, skills: catalog.skills })
+    } catch (error) {
+      set({ error: String(error) })
+    }
+  },
+
+  saveApplicationRule: async (rule) => {
+    try {
+      const catalog = await window.aiHelper.invoke<SkillCatalogSnapshot>('applicationRule:save', rule)
+      set({ skillRoots: catalog.roots, applications: catalog.applications, projects: catalog.projects, skills: catalog.skills })
+    } catch (error) {
+      set({ error: String(error) })
+    }
+  },
+
+  removeApplicationRule: async (id) => {
+    try {
+      const catalog = await window.aiHelper.invoke<SkillCatalogSnapshot>('applicationRule:remove', id)
+      set({ skillRoots: catalog.roots, applications: catalog.applications, projects: catalog.projects, skills: catalog.skills })
+    } catch (error) {
+      set({ error: String(error) })
+    }
+  },
+
   createSkill: async (form) => {
     try {
       set({ saving: true, error: null })
@@ -235,5 +345,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSearch: (search) => set({ search }),
   setRootFilter: (rootFilter) => set({ rootFilter }),
   setIssueFilter: (issueFilter) => set({ issueFilter }),
+  setLibraryPerspective: (libraryPerspective) => set({ libraryPerspective }),
   clearError: () => set({ error: null })
 }))

@@ -13,8 +13,11 @@ import {
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'path'
 import { homedir } from 'os'
 import type { SavedSkillRoot, SettingsStore } from '../settings/settings-store'
-import { listSkillApplicationRoots } from './ecosystem'
+import { isBuiltinApplicationId, listBuiltinApplicationRules } from './ecosystem'
+import { ProjectDiscoveryManager } from './project-discovery-manager'
+import { buildSkillTopology, type ApplicationRule, type ProjectRegistration } from './skill-topology'
 import { buildSkillMarkdown, normalizeSkillName, parseSkillMarkdown } from './skill-parser'
+import { replaceDirectoryAtomically } from './skill-filesystem'
 import type {
   CreateSkillInput,
   ImportSkillInput,
@@ -25,8 +28,9 @@ import type {
   SkillDetail,
   SkillRoot,
   SkillRootCategory,
-  SkillRootSource,
   SkillSummary,
+  SkillCatalogSnapshot,
+  TransferSkillInput,
   UpdateSkillInput
 } from './skill-types'
 
@@ -34,61 +38,141 @@ const ignoredDirs = new Set(['node_modules', '.git', 'out', 'dist', 'build'])
 const ignoredFileNames = new Set(['.DS_Store'])
 const skillFileName = 'SKILL.md'
 const maxPreviewBytes = 1024 * 1024
-
-type RootCandidate = SavedSkillRoot & {
-  source: SkillRootSource
-  category?: SkillRootCategory
-  appIds?: string[]
-  appNames?: string[]
-}
+const maxImagePreviewBytes = 8 * 1024 * 1024
 
 export class SkillManager {
-  constructor(private settings: SettingsStore) {}
+  private readonly projectDiscovery: ProjectDiscoveryManager
 
-  getSkillRoots(): SkillRoot[] {
-    const roots: RootCandidate[] = [
-      ...getDefaultRoots().map((root) => ({
-        ...root,
-        source: 'default' as const,
-        category: defaultRootCategory(root.id)
-      })),
-      ...getApplicationRoots(),
-      ...this.settings.getSkillRoots().map((root) => ({
-        ...root,
-        source: 'custom' as const,
-        category: 'custom' as const
-      }))
-    ]
-    const deduped = new Map<string, SkillRoot>()
+  constructor(private settings: SettingsStore, onCatalogChanged?: () => void) {
+    this.projectDiscovery = new ProjectDiscoveryManager(settings, {}, onCatalogChanged)
+  }
 
-    for (const root of roots) {
-      const resolved = expandHome(root.path)
-      const exists = existsSync(resolved)
-      const pathKey = pathDedupKey(resolved)
-      const existing = deduped.get(pathKey)
-      const appIds = uniqueValues([...(existing?.appIds ?? []), ...(root.appIds ?? [])])
-      const appNames = uniqueValues([...(existing?.appNames ?? []), ...(root.appNames ?? [])])
-      const id = existing?.id || root.id || resolved
-      const category = mergeRootCategory(existing?.category, root.category, appNames)
-      const source = mergeRootSource(existing?.source, root.source, appNames)
-      const shared = category === 'shared' || appNames.length > 1
-
-      deduped.set(pathKey, {
-        id,
-        label: formatRootLabel(existing?.label || root.label, category, appNames),
-        path: existing?.path || resolved,
-        readonly: Boolean(existing?.readonly || root.readonly),
-        defaultRoot: Boolean(existing?.defaultRoot || isDefaultRootId(id)),
-        exists: Boolean(existing?.exists || exists),
-        source,
+  getSkillRoots(topology = this.getTopology()): SkillRoot[] {
+    const applicationById = new Map(topology.applications.map((application) => [application.id, application]))
+    const resolvedRoots: SkillRoot[] = topology.locations.map((location) => {
+      const appNames = location.applicationIds.map((id) => applicationById.get(id)?.name || id)
+      const shared = location.applicationIds.length > 1
+      const category: SkillRootCategory = shared
+        ? 'shared'
+        : location.applicationIds[0] === 'codex'
+          ? 'codex'
+          : 'application'
+      return {
+        id: location.id,
+        label: shared ? '共享技能目录' : appNames[0] || '应用技能目录',
+        path: location.path,
+        readonly: false,
+        defaultRoot: location.scope === 'system',
+        exists: existsSync(location.path),
+        source: 'application',
         category,
-        appIds,
+        appIds: location.applicationIds,
         appNames,
-        shared
-      })
-    }
+        shared,
+        scope: location.scope,
+        projectId: location.projectId
+      }
+    })
+    const occupiedPaths = new Set(resolvedRoots.map((root) => realpathOrResolve(root.path)))
+    const legacyRoots: SkillRoot[] = this.settings.getLegacySkillRoots().filter((root) => {
+      const key = realpathOrResolve(expandHome(root.path))
+      if (occupiedPaths.has(key)) return false
+      occupiedPaths.add(key)
+      return true
+    }).map((root) => {
+      const path = expandHome(root.path)
+      return {
+        id: root.id,
+        label: root.label,
+        path,
+        readonly: Boolean(root.readonly),
+        defaultRoot: false,
+        exists: existsSync(path),
+        source: 'custom',
+        category: 'custom',
+        appIds: [],
+        appNames: [],
+        shared: false,
+        scope: 'system',
+        projectId: null
+      }
+    })
+    return [...resolvedRoots, ...legacyRoots]
+  }
 
-    return [...deduped.values()]
+  getCatalogSnapshot(): SkillCatalogSnapshot {
+    const topology = this.getTopology()
+    const roots = this.getSkillRoots(topology)
+    return {
+      applications: topology.applications,
+      projects: topology.projects,
+      roots,
+      skills: this.listSkills(roots),
+      discovery: this.projectDiscovery.getStatus()
+    }
+  }
+
+  async refreshCatalogSnapshot(mode: 'quick' | 'deep' = 'quick'): Promise<SkillCatalogSnapshot> {
+    const registeredProjects = this.settings.getProjects()
+    const customApplications = this.settings.getApplicationRules()
+    const applications = [...listBuiltinApplicationRules(registeredProjects), ...customApplications]
+    await this.projectDiscovery.refresh(applications, registeredProjects, { mode })
+    return this.getCatalogSnapshot()
+  }
+
+  cancelProjectDiscovery(): void {
+    this.projectDiscovery.cancel()
+  }
+
+  dispose(): void {
+    this.projectDiscovery.dispose()
+  }
+
+  saveApplicationRule(rule: ApplicationRule): SkillCatalogSnapshot {
+    const projects = this.settings.getProjects()
+    if (isBuiltinApplicationId(rule.id)) {
+      throw new Error('自定义应用规则不能使用内置应用 ID。')
+    }
+    const customRules = this.settings.getApplicationRules().filter((item) => item.id !== rule.id)
+    const nextRules = [...customRules, { ...rule, source: 'custom' as const }]
+    buildSkillTopology({ applications: [...listBuiltinApplicationRules(projects), ...nextRules], projects })
+    this.settings.saveApplicationRules(nextRules)
+    return this.getCatalogSnapshot()
+  }
+
+  removeApplicationRule(id: string): SkillCatalogSnapshot {
+    this.settings.saveApplicationRules(this.settings.getApplicationRules().filter((rule) => rule.id !== id))
+    return this.getCatalogSnapshot()
+  }
+
+  saveProject(project: ProjectRegistration): SkillCatalogSnapshot {
+    const projects = this.settings.getProjects().filter((item) => item.id !== project.id)
+    const nextProjects = [...projects, { ...project, source: 'manual' as const }]
+    buildSkillTopology({
+      applications: [...listBuiltinApplicationRules(nextProjects), ...this.settings.getApplicationRules()],
+      projects: nextProjects
+    })
+    this.settings.saveProjects(nextProjects)
+    this.settings.saveIgnoredProjectPaths(
+      this.settings.getIgnoredProjectPaths().filter((path) => resolve(path) !== resolve(project.path))
+    )
+    return this.getCatalogSnapshot()
+  }
+
+  removeProject(id: string): SkillCatalogSnapshot {
+    const manualProjects = this.settings.getProjects()
+    const automaticProject = this.settings.getProjectDiscoveryRecords().find((project) => project.id === id)
+    this.settings.saveProjects(manualProjects.filter((project) => project.id !== id))
+    if (automaticProject && !manualProjects.some((project) => project.id === id)) {
+      this.settings.saveIgnoredProjectPaths([
+        ...this.settings.getIgnoredProjectPaths(),
+        automaticProject.path
+      ])
+      this.settings.saveProjectDiscoveryRecords(
+        this.settings.getProjectDiscoveryRecords().filter((project) => project.id !== id)
+      )
+    }
+    return this.getCatalogSnapshot()
   }
 
   saveCustomRoots(roots: SavedSkillRoot[]): SkillRoot[] {
@@ -101,8 +185,8 @@ export class SkillManager {
     return this.getSkillRoots()
   }
 
-  listSkills(): SkillSummary[] {
-    const roots = this.getSkillRoots().filter((root) => root.exists)
+  listSkills(availableRoots = this.getSkillRoots()): SkillSummary[] {
+    const roots = availableRoots.filter((root) => root.exists)
     const skills: SkillSummary[] = []
 
     for (const root of roots) {
@@ -162,8 +246,10 @@ export class SkillManager {
     if (!stats.isFile()) throw new Error('只能预览文件，不能预览目录。')
 
     const kind = detectFileKind(targetPath)
-    const canReadAsText = kind !== 'binary' && kind !== 'image'
-    const truncated = stats.size > maxPreviewBytes
+    const extension = extname(targetPath).toLowerCase()
+    const canReadAsText = kind !== 'binary' && (kind !== 'image' || extension === '.svg')
+    const previewLimit = kind === 'image' ? maxImagePreviewBytes : maxPreviewBytes
+    const truncated = stats.size > previewLimit
     const content = canReadAsText
       ? readFileSync(targetPath).subarray(0, maxPreviewBytes).toString('utf-8')
       : null
@@ -175,6 +261,7 @@ export class SkillManager {
       size: stats.size,
       modifiedAt: stats.mtime.toISOString(),
       content,
+      dataUrl: kind === 'image' && !truncated ? fileDataUrl(targetPath) : undefined,
       truncated
     }
   }
@@ -285,6 +372,47 @@ export class SkillManager {
     return { success: true }
   }
 
+  transferSkill(input: TransferSkillInput) {
+    const startedAt = Date.now()
+    const sourceSkillFile = resolveSkillFilePath(input.skillPath)
+    this.requireReadableRoot(sourceSkillFile)
+    const sourceDirectory = resolve(sourceSkillFile, '..')
+    const targetRoots = this.getSkillRoots().filter((root) =>
+      root.scope === input.scope &&
+      root.projectId === (input.scope === 'project' ? input.projectId || null : null) &&
+      root.appIds.some((id) => input.applicationIds.includes(id))
+    )
+    const uniqueRoots = [...new Map(targetRoots.map((root) => [realpathOrResolve(root.path), root])).values()]
+    if (!uniqueRoots.length) throw new Error('所选应用没有匹配的技能位置。')
+    const messages: string[] = []
+    for (const root of uniqueRoots) {
+      const destination = resolve(root.path, basename(sourceDirectory))
+      assertWithinRoot(destination, root.path)
+      if (realpathOrResolve(destination) === realpathOrResolve(sourceDirectory)) {
+        messages.push(`${root.label}: 已在目标位置`)
+        continue
+      }
+      if (input.operation === 'remove') {
+        const selectedBindings = root.appIds.filter((id) => input.applicationIds.includes(id))
+        if (root.shared && selectedBindings.length < root.appIds.length) {
+          throw new Error(`${root.label} 被多个应用共享；必须同时选择全部关联应用才能移除。`)
+        }
+        if (existsSync(join(destination, skillFileName))) this.deleteSkill(destination)
+        messages.push(`${root.label}: ${destination}`)
+        continue
+      }
+      replaceDirectoryAtomically(sourceDirectory, destination)
+      messages.push(`${root.label}: ${destination}`)
+    }
+    return {
+      command: `${input.operation} ${basename(sourceDirectory)}`,
+      stdout: messages.join('\n'),
+      stderr: '',
+      exitCode: 0,
+      durationMs: Date.now() - startedAt
+    }
+  }
+
   getBackups() {
     return this.settings.getBackups()
   }
@@ -310,12 +438,25 @@ export class SkillManager {
       system,
       modifiedAt: stats.mtime.toISOString(),
       resourceDirs,
-      issues: parsed.issues
+      issues: parsed.issues,
+      applicationIds: root.appIds,
+      projectId: root.projectId,
+      scope: root.scope
     }
   }
 
+  private getTopology() {
+    const registeredProjects = this.settings.getProjects()
+    const customApplications = this.settings.getApplicationRules()
+    const discoveredProjects = this.projectDiscovery.getProjects(registeredProjects)
+    return buildSkillTopology({
+      applications: [...listBuiltinApplicationRules(discoveredProjects), ...customApplications],
+      projects: discoveredProjects
+    })
+  }
+
   private requireReadableRoot(skillFilePath: string): SkillRoot {
-    const root = this.getSkillRoots().find(
+    const root = this.getSkillRoots().sort((left, right) => right.path.length - left.path.length).find(
       (item) => item.exists && isPathWithin(skillFilePath, item.path)
     )
     if (!root) throw new Error('Skill 路径不在已登记根目录内。')
@@ -341,82 +482,6 @@ export class SkillManager {
       null
     )
   }
-}
-
-function getDefaultRoots(): SavedSkillRoot[] {
-  const home = homedir()
-  return [
-    { id: 'codex-skills', label: 'Codex Skills', path: join(home, '.codex', 'skills') },
-    { id: 'agents-skills', label: 'Agents Skills', path: join(home, '.agents', 'skills') },
-    {
-      id: 'developer-claude-skills',
-      label: 'Developer Claude Skills',
-      path: join(home, 'Developer', '.claude', 'skills')
-    },
-    { id: 'developer-skills', label: 'Developer Skills', path: join(home, 'Developer', 'skills') }
-  ]
-}
-
-function getApplicationRoots(): RootCandidate[] {
-  return listSkillApplicationRoots().map((root) => ({
-    id: `app-${root.id}-skills`,
-    label: root.name,
-    path: root.path,
-    source: 'application',
-    category: root.id === 'codex' ? 'codex' : 'application',
-    appIds: [root.id],
-    appNames: [root.name]
-  }))
-}
-
-function isDefaultRootId(id: string): boolean {
-  return ['codex-skills', 'agents-skills', 'developer-claude-skills', 'developer-skills'].includes(
-    id
-  )
-}
-
-function defaultRootCategory(id: string): SkillRootCategory {
-  if (id === 'codex-skills') return 'codex'
-  if (id === 'agents-skills') return 'shared'
-  return 'application'
-}
-
-function mergeRootCategory(
-  current: SkillRootCategory | undefined,
-  next: SkillRootCategory | undefined,
-  appNames: string[]
-): SkillRootCategory {
-  if (appNames.length > 1) return 'shared'
-  if (current === 'shared' || next === 'shared') return 'shared'
-  if (current === 'custom' && next) return next
-  return current || next || 'application'
-}
-
-function mergeRootSource(
-  current: SkillRootSource | undefined,
-  next: SkillRootSource,
-  appNames: string[]
-): SkillRootSource {
-  if (appNames.length > 0) return 'application'
-  return current || next
-}
-
-function formatRootLabel(
-  fallback: string,
-  category: SkillRootCategory,
-  appNames: string[]
-): string {
-  if (category === 'shared') return '共享技能目录'
-  if (appNames.length === 1) return appNames[0]
-  return fallback
-}
-
-function uniqueValues(values: string[]): string[] {
-  return [...new Set(values.filter(Boolean))]
-}
-
-function pathDedupKey(path: string): string {
-  return realpathOrResolve(path)
 }
 
 function expandHome(path: string): string {
@@ -515,10 +580,18 @@ function detectFileKind(path: string): SkillFileKind {
   )
     return 'script'
   if (['.json', '.jsonc'].includes(extension)) return 'json'
-  if (['.txt', '.csv', '.log', '.yaml', '.yml', '.toml', '.ini', '.env'].includes(extension))
+  if (['.txt', '.csv', '.log', '.yaml', '.yml', '.toml', '.ini', '.env', '.html', '.htm', '.xml', '.css'].includes(extension))
     return 'text'
-  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'].includes(extension)) return 'image'
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp', '.avif'].includes(extension)) return 'image'
   return 'binary'
+}
+
+function fileDataUrl(path: string): string {
+  const mime: Record<string, string> = {
+    '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.ico': 'image/x-icon', '.bmp': 'image/bmp', '.avif': 'image/avif'
+  }
+  return `data:${mime[extname(path).toLowerCase()] || 'application/octet-stream'};base64,${readFileSync(path).toString('base64')}`
 }
 
 function normalizeRelativePath(path: string): string {

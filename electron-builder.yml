@@ -1,0 +1,56 @@
+appId: com.sookool.agenthelper
+productName: SooKool Agent Helper
+
+directories:
+  buildResources: build
+  output: release
+
+mac:
+  icon: icon.icns
+  category: public.app-category.developer-tools
+  extendInfo:
+    CFBundleDisplayName: SooKool 智能体助手
+    CFBundleDevelopmentRegion: zh-Hans
+    CFBundleLocalizations:
+      - en
+      - zh-Hans
+      - zh-Hant
+      - ja
+      - fr
+      - ko
+      - es
+      - pt-BR
+      - ar
+
+win:
+  icon: icon.ico
+  target: nsis
+
+linux:
+  icon: icon.png
+
+extraResources:
+  - from: resources/sookool-app-icon.png
+    to: sookool-app-icon.png
+  - from: resources/sookool-app-icon-dark.png
+    to: sookool-app-icon-dark.png
+  - from: resources/sookool-app-icon.ico
+    to: sookool-app-icon.ico
+  - from: build/en.lproj
+    to: en.lproj
+  - from: build/zh-Hans.lproj
+    to: zh-Hans.lproj
+  - from: build/zh-Hant.lproj
+    to: zh-Hant.lproj
+  - from: build/ja.lproj
+    to: ja.lproj
+  - from: build/fr.lproj
+    to: fr.lproj
+  - from: build/ko.lproj
+    to: ko.lproj
+  - from: build/es.lproj
+    to: es.lproj
+  - from: build/pt-BR.lproj
+    to: pt-BR.lproj
+  - from: build/ar.lproj
+    to: ar.lproj

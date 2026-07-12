@@ -2,6 +2,25 @@ export type SkillRootSource = 'default' | 'application' | 'custom'
 
 export type SkillRootCategory = 'codex' | 'application' | 'shared' | 'custom'
 
+export type SkillScope = 'system' | 'project'
+
+export interface SkillApplication {
+  id: string
+  name: string
+  source: 'builtin' | 'custom'
+  detectionPaths: string[]
+  systemSkillPaths: string[]
+  projectSkillPaths: string[]
+}
+
+export interface SkillProject {
+  id: string
+  name: string
+  path: string
+  parentProjectId: string | null
+  source?: 'manual' | 'auto'
+}
+
 export interface SkillRoot {
   id: string
   label: string
@@ -14,6 +33,8 @@ export interface SkillRoot {
   appIds: string[]
   appNames: string[]
   shared: boolean
+  scope: SkillScope
+  projectId: string | null
 }
 
 export interface SkillIssue {
@@ -34,6 +55,9 @@ export interface SkillSummary {
   modifiedAt: string
   resourceDirs: string[]
   issues: SkillIssue[]
+  applicationIds: string[]
+  projectId: string | null
+  scope: SkillScope
 }
 
 export interface SkillDetail extends SkillSummary {
@@ -61,6 +85,7 @@ export interface SkillFileContent {
   size: number
   modifiedAt: string
   content: string | null
+  dataUrl?: string
   truncated: boolean
 }
 
@@ -70,4 +95,21 @@ export interface SkillBackupRecord {
   originalPath: string
   backupPath: string
   createdAt: string
+}
+
+export interface SkillCatalogSnapshot {
+  applications: SkillApplication[]
+  projects: SkillProject[]
+  roots: SkillRoot[]
+  skills: SkillSummary[]
+  discovery: ProjectDiscoveryStatus
+}
+
+export interface ProjectDiscoveryStatus {
+  phase: 'idle' | 'scanning' | 'cancelled'
+  mode: 'quick' | 'deep' | null
+  discoveredProjects: number
+  scannedDirectories: number
+  truncatedRoots: string[]
+  completedAt: string | null
 }

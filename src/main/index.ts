@@ -1,27 +1,55 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, session, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { SettingsStore } from './settings/settings-store'
-import { listSkillAgentAdapters, runSkillsCommand } from './skills/ecosystem'
+import { resolveAppLanguage, SettingsStore, type AppLanguagePreference } from './settings/settings-store'
 import { SkillMarketManager } from './skills/skill-market'
 import { SkillManager } from './skills/skill-manager'
+import { getAppDisplayName, installApplicationMenu } from './app-menu'
+import { ResourceManager } from './resources/resource-manager'
 
 let skillManager: SkillManager
 let skillMarketManager: SkillMarketManager
 let settingsStore: SettingsStore
+let resourceManager: ResourceManager
 
-function getAppIconPath(): string {
-  if (app.isPackaged) return join(process.resourcesPath, 'sookool-app-icon.png')
-  return join(app.getAppPath(), 'resources/sookool-app-icon.png')
+app.setName('SooKool Agent Helper')
+
+function applyAppLanguage(preference: AppLanguagePreference): void {
+  const language = resolveAppLanguage(preference, app.getLocale())
+  const displayName = getAppDisplayName(language)
+  app.setName(displayName)
+  app.setAboutPanelOptions({
+    applicationName: displayName,
+    applicationVersion: app.getVersion(),
+    copyright: `© ${new Date().getFullYear()} SooKool`
+  })
+  BrowserWindow.getAllWindows().forEach((window) => window.setTitle(displayName))
+  installApplicationMenu(language)
+}
+
+function getAppIconPath(dark = false): string {
+  const filename =
+    process.platform === 'win32'
+      ? 'sookool-app-icon.ico'
+      : dark
+        ? 'sookool-app-icon-dark.png'
+        : 'sookool-app-icon.png'
+  if (app.isPackaged) return join(process.resourcesPath, filename)
+  return join(app.getAppPath(), 'resources', filename)
+}
+
+function updateDockIcon(): void {
+  // Packaged apps must use the ICNS embedded in their bundle so macOS can
+  // apply its native sizing, caching and Dock presentation. Runtime PNG
+  // replacement is only a development fallback for Electron.app.
+  if (process.platform !== 'darwin' || app.isPackaged) return
+  const icon = nativeImage.createFromPath(getAppIconPath(nativeTheme.shouldUseDarkColors))
+  if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
 function createWindow(): void {
   const iconPath = getAppIconPath()
-  const icon = nativeImage.createFromPath(iconPath)
-
-  if (process.platform === 'darwin' && !icon.isEmpty()) {
-    app.dock?.setIcon(icon)
-  }
+  updateDockIcon()
 
   const mainWindow = new BrowserWindow({
     width: 1240,
@@ -29,11 +57,11 @@ function createWindow(): void {
     minWidth: 980,
     minHeight: 640,
     show: false,
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
     icon: iconPath,
-    title: 'SooKool-Agent-Helper',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
+    title: getAppDisplayName(resolveAppLanguage(settingsStore.getAppPreferences().language, app.getLocale())),
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 16 } : undefined,
     vibrancy: process.platform === 'darwin' ? 'sidebar' : undefined,
     visualEffectState: process.platform === 'darwin' ? 'active' : undefined,
     webPreferences: {
@@ -58,6 +86,44 @@ function createWindow(): void {
 
 function registerIpc(): void {
   ipcMain.handle('skillRoot:list', async () => skillManager.getSkillRoots())
+  ipcMain.handle('skillCatalog:get', async (_event, options?: { refresh?: boolean; mode?: 'quick' | 'deep' }) =>
+    options?.refresh ? skillManager.refreshCatalogSnapshot(options.mode) : skillManager.getCatalogSnapshot()
+  )
+  ipcMain.handle('projectDiscovery:cancel', async () => skillManager.cancelProjectDiscovery())
+  ipcMain.handle('projectScanRoot:list', async () => settingsStore.getProjectScanRoots())
+  ipcMain.handle('projectScanRoot:add', async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'], title: '添加项目扫描位置' })
+    if (result.canceled || !result.filePaths[0]) return settingsStore.getProjectScanRoots()
+    const roots = [...settingsStore.getProjectScanRoots(), result.filePaths[0]]
+    settingsStore.saveProjectScanRoots(roots)
+    return settingsStore.getProjectScanRoots()
+  })
+  ipcMain.handle('projectScanRoot:remove', async (_event, path: string) => {
+    settingsStore.saveProjectScanRoots(settingsStore.getProjectScanRoots().filter((root) => root !== path))
+    return settingsStore.getProjectScanRoots()
+  })
+  ipcMain.handle('applicationRule:save', async (_event, rule) =>
+    skillManager.saveApplicationRule(rule)
+  )
+  ipcMain.handle('applicationRule:remove', async (_event, id: string) =>
+    skillManager.removeApplicationRule(id)
+  )
+  ipcMain.handle('project:add', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: '添加项目目录'
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    const path = result.filePaths[0]
+    return skillManager.saveProject({
+      id: crypto.randomUUID(),
+      name: path.split(/[\\/]/).pop() || '未命名项目',
+      path
+    })
+  })
+  ipcMain.handle('project:remove', async (_event, id: string) =>
+    skillManager.removeProject(id)
+  )
 
   ipcMain.handle('skillRoot:add', async () => {
     const result = await dialog.showOpenDialog({
@@ -101,16 +167,32 @@ function registerIpc(): void {
   ipcMain.handle('skill:reveal', async (_event, skillPath: string) =>
     skillManager.revealSkill(skillPath)
   )
+  ipcMain.handle('skill:transfer', async (_event, input) => skillManager.transferSkill(input))
   ipcMain.handle('backup:list', async () => skillManager.getBackups())
-  ipcMain.handle('ecosystem:agents', async () => listSkillAgentAdapters())
-  ipcMain.handle('ecosystem:run', async (_event, input) => runSkillsCommand(input))
+  ipcMain.handle('ecosystem:agents', async () =>
+    skillManager.getCatalogSnapshot().applications.map((application) => ({
+      id: application.id,
+      name: application.name,
+      projectPath: application.projectSkillPaths[0] || '',
+      globalPath: application.systemSkillPaths[0] || null,
+      installed: true
+    }))
+  )
   ipcMain.handle('market:listSources', async () => skillMarketManager.listSources())
+  ipcMain.handle('market:listCachedSkills', async (_event, input) => skillMarketManager.listCachedSkills(input))
+  ipcMain.handle('market:listCachedSkillsBatch', async (_event, input) => skillMarketManager.listCachedSkillsBatch(input))
+  ipcMain.handle('market:searchPublic', async (_event, input) => skillMarketManager.searchPublic(input))
   ipcMain.handle('market:addSource', async (_event, input) => skillMarketManager.addSource(input))
   ipcMain.handle('market:removeSource', async (_event, sourceId: string) =>
     skillMarketManager.removeSource(sourceId)
   )
+  ipcMain.handle('market:updateSourcePalette', async (_event, input) =>
+    skillMarketManager.updateSourcePalette(input.sourceId, input.palette)
+  )
   ipcMain.handle('market:listSkills', async (_event, input) => skillMarketManager.listSkills(input))
   ipcMain.handle('market:search', async (_event, input) => skillMarketManager.search(input))
+  ipcMain.handle('market:preview', async (_event, input) => skillMarketManager.preview(input))
+  ipcMain.handle('market:listInstallTargets', async () => skillMarketManager.listInstallTargets())
   ipcMain.handle('market:install', async (_event, input) => skillMarketManager.install(input))
   ipcMain.handle('market:importLocal', async (_event, input) => {
     const result = await dialog.showOpenDialog({
@@ -125,23 +207,42 @@ function registerIpc(): void {
     })
   })
   ipcMain.handle('settings:get', async () => settingsStore.getAppPreferences())
-  ipcMain.handle('settings:update', async (_event, input) =>
-    settingsStore.saveAppPreferences(input)
-  )
+  ipcMain.handle('settings:update', async (_event, input) => {
+    const preferences = settingsStore.saveAppPreferences(input)
+    applyAppLanguage(preferences.language)
+    return preferences
+  })
   ipcMain.handle('app:metrics', async () => {
     const memory = process.memoryUsage()
+    const processes = app.getAppMetrics().map((metric) => ({
+      pid: metric.pid,
+      type: metric.type,
+      name: metric.name,
+      cpuPercent: metric.cpu.percentCPUUsage,
+      idleWakeupsPerSecond: metric.cpu.idleWakeupsPerSecond,
+      memory: metric.memory ? {
+        workingSet: metric.memory.workingSetSize * 1024,
+        peakWorkingSet: metric.memory.peakWorkingSetSize * 1024,
+        privateBytes: (metric.memory.privateBytes ?? 0) * 1024
+      } : null
+    }))
     return {
       version: app.getVersion(),
       platform: process.platform,
       arch: process.arch,
+      uptime: process.uptime(),
       memory: {
         rss: memory.rss,
         heapUsed: memory.heapUsed,
         heapTotal: memory.heapTotal,
-        external: memory.external
-      }
+        external: memory.external,
+        arrayBuffers: memory.arrayBuffers
+      },
+      processes,
+      storage: await resourceManager.inspect()
     }
   })
+  ipcMain.handle('app:clearResource', async (_event, id) => resourceManager.clear(id))
 }
 
 app.whenReady().then(() => {
@@ -152,9 +253,23 @@ app.whenReady().then(() => {
   })
 
   settingsStore = new SettingsStore(join(app.getPath('userData'), 'settings.json'))
-  skillManager = new SkillManager(settingsStore)
-  skillMarketManager = new SkillMarketManager(settingsStore, skillManager)
+  applyAppLanguage(settingsStore.getAppPreferences().language)
+  skillManager = new SkillManager(settingsStore, () => {
+    const catalog = skillManager.getCatalogSnapshot()
+    BrowserWindow.getAllWindows().forEach((window) => window.webContents.send('skillCatalog:changed', catalog))
+  })
+  skillMarketManager = new SkillMarketManager(
+    settingsStore,
+    skillManager,
+    join(app.getPath('userData'), 'market-cache')
+  )
+  resourceManager = new ResourceManager({
+    userDataPath: app.getPath('userData'),
+    logsPath: app.getPath('logs'),
+    clearBrowserCache: () => session.defaultSession.clearCache()
+  })
   registerIpc()
+  nativeTheme.on('updated', updateDockIcon)
   createWindow()
 
   app.on('activate', () => {
@@ -165,3 +280,5 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+app.on('before-quit', () => skillManager?.dispose())

@@ -1,45 +1,75 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Chip, Input, ListBox, Select, TextField } from '@heroui/react'
-import { AgentIcon, agentMappings } from '@lobehub/icons'
+import {
+  Button,
+  Card,
+  Checkbox,
+  Chip,
+  Input,
+  ListBox,
+  Select,
+  ScrollShadow,
+  Spinner,
+  Tabs,
+  TextField,
+  Tooltip
+} from '@heroui/react'
+import { AgentIcon, Antigravity, Qwen, agentMappings } from '@lobehub/icons'
 import {
   AlertTriangle,
   AppWindow,
   ArchiveRestore,
+  ArrowRightLeft,
   BookText,
   Check,
   ChevronDown,
+  Clock3,
   Copy,
-  Download,
+  CopyPlus,
+  Cpu,
+  Database,
+  Eraser,
   File as FileIcon,
   FileCode2,
   FileText,
   Folder,
+  FolderCog,
   FolderSearch,
   HardDrive,
   Image,
   Languages,
   Palette,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   RefreshCw,
   Search,
+  Settings2,
+  Share2,
   SlidersHorizontal,
   Trash2,
   X
 } from 'lucide-react'
-import { translate, type AppLanguage, type ThemeMode, type TranslationKey } from '@/i18n'
+import { resolveAppLanguage, translate, type AppLanguage, type AppLanguagePreference, type AppMetrics, type ThemeMode, type TranslationKey } from '@/i18n'
+import { fileViewLabels, localizeSkillWarning, marketText, skillFileCopy } from '@/market-copy'
+import {
+  buildSkillLibraryTree,
+  type SkillLibraryNode
+} from '@/skill-library-tree'
 import type { ViewType } from '@/stores/app-store'
 import { useAppStore } from '@/stores/app-store'
-import type { SkillAgentAdapter, SkillsCommandInput, SkillsCommandResult } from '@/types/ecosystem'
+import type { SkillAgentAdapter, SkillsCommandResult } from '@/types/ecosystem'
 import type {
+  SkillApplication,
   SkillDetail,
   SkillFileContent,
   SkillFileKind,
   SkillFileTreeNode,
+  SkillProject,
   SkillRoot,
-  SkillRootCategory,
   SkillSummary
 } from '@/types/skills'
 import { SkillMarket } from './SkillEcosystem'
+import { MarkdownRenderer } from './MarkdownRenderer'
 
 const skillMarkdownPath = 'SKILL.md'
 
@@ -47,37 +77,44 @@ function useTranslator(): (
   key: TranslationKey,
   replacements?: Parameters<typeof translate>[2]
 ) => string {
-  const language = useAppStore((state) => state.preferences.language)
+  const language = resolveAppLanguage(useAppStore((state) => state.preferences.language))
   return (key, replacements) => translate(language, key, replacements)
 }
 
 export function SkillLibrary({ view }: { view: ViewType }): React.JSX.Element {
   if (view === 'market') return <SkillMarket />
-  if (view === 'settings') return <SettingsView />
+  if (view === 'settings') return <SettingsView scope="general" />
+  if (view === 'skill-settings') return <SettingsView scope="skills" />
   return <SkillsView />
 }
 
 function SkillsView(): React.JSX.Element {
   const t = useTranslator()
-  const language = useAppStore((state) => state.preferences.language)
+  const language = resolveAppLanguage(useAppStore((state) => state.preferences.language))
+  const topologyCopy = skillTopologyCopy(t)
   const {
     skills,
+    applications,
+    projects,
     selectedSkill,
     skillRoots,
     search,
     rootFilter,
     issueFilter,
+    libraryPerspective,
     loading,
     saving,
     error,
     setSearch,
     setRootFilter,
     setIssueFilter,
+    setLibraryPerspective,
     refreshSkills,
     selectSkill,
     deleteSelectedSkill,
     revealSelectedSkill,
-    clearError
+    clearError,
+    setCurrentView
   } = useAppStore()
 
   const [applying, setApplying] = useState(false)
@@ -104,30 +141,37 @@ function SkillsView(): React.JSX.Element {
     })
   }, [skills, search, rootFilter, issueFilter, rootById])
 
-  const groupedSkills = useMemo(
-    () => groupSkillsByRoot(filteredSkills, skillRoots),
-    [filteredSkills, skillRoots]
+  const libraryTree = useMemo(
+    () =>
+      buildSkillLibraryTree(
+        libraryPerspective,
+        { applications, projects, roots: skillRoots, skills: filteredSkills },
+        {
+          shared: t('root.shared'),
+          system: t('skills.scope.system'),
+          unclassified: t('topology.unclassified')
+        }
+      ),
+    [applications, projects, skillRoots, filteredSkills, libraryPerspective, t]
   )
 
-  const applicationRootCount = skillRoots.filter(
-    (root) => root.exists && root.source === 'application'
-  ).length
+  const applicationRootCount = applications.length
   const selectedRoot = selectedSkill ? rootById.get(selectedSkill.rootId) : null
   const searchActive = search.trim().length > 0
   const accordionExpandedIds = searchActive
-    ? new Set(groupedSkills.map((group) => group.id))
+    ? new Set(flattenLibraryNodeIds(libraryTree))
     : expandedGroupIds
 
   useEffect(() => {
     if (searchActive) return
 
     setExpandedGroupIds((current) => {
-      const validIds = new Set(groupedSkills.map((group) => group.id))
+      const validIds = new Set(flattenLibraryNodeIds(libraryTree))
       const next = new Set([...current].filter((id) => validIds.has(id)))
 
       return sameSet(current, next) ? current : next
     })
-  }, [groupedSkills, searchActive])
+  }, [libraryTree, searchActive])
 
   useEffect(() => {
     let mounted = true
@@ -217,10 +261,13 @@ function SkillsView(): React.JSX.Element {
       <section className="list-pane">
         <div className="pane-heading">
           <div>
-            <h2>{t('skills.title')}</h2>
+            <div className="module-title"><BookText size={24} /><h2>{t('skills.title')}</h2></div>
             <p>{t('skills.count', { count: skills.length })}</p>
           </div>
           <div className="heading-actions">
+            <IconButton label={t('settings.directories.title')} onPress={() => setCurrentView('skill-settings')}>
+              <FolderCog size={17} />
+            </IconButton>
             <IconButton label={t('skills.refresh')} onPress={() => void refreshSkills()}>
               <RefreshCw size={17} className={loading ? 'spin' : ''} />
             </IconButton>
@@ -236,6 +283,28 @@ function SkillsView(): React.JSX.Element {
               icon={AppWindow}
             />
           </div>
+
+          <Tabs
+            className="library-perspective-tabs"
+            aria-label={t('skills.title')}
+            selectedKey={libraryPerspective}
+            onSelectionChange={(key) => {
+              if (key === 'application' || key === 'project') setLibraryPerspective(key)
+            }}
+          >
+            <Tabs.ListContainer>
+              <Tabs.List>
+                <Tabs.Tab id="application">
+                  {topologyCopy.byApplication}
+                  <Tabs.Indicator />
+                </Tabs.Tab>
+                <Tabs.Tab id="project">
+                  {topologyCopy.byProject}
+                  <Tabs.Indicator />
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs>
 
           <div className="library-filter-grid">
             <TextField
@@ -272,52 +341,25 @@ function SkillsView(): React.JSX.Element {
           </div>
         </div>
 
-        <div className="skill-list">
-          {groupedSkills.map((group) => {
-            const collapsed = !accordionExpandedIds.has(group.id)
-            const contentId = `skill-group-${group.id}`
-            return (
-              <section key={group.id} className="skill-group" aria-label={group.label}>
-                <button
-                  type="button"
-                  className="skill-group-heading"
-                  aria-expanded={!collapsed}
-                  aria-controls={contentId}
-                  onClick={() => toggleGroup(group.id)}
-                >
-                  <SettingsRootIcon root={group.root} className="skill-group-icon" />
-                  <span className="skill-group-title">
-                    <strong>{group.label}</strong>
-                    <span>{formatGroupSubtitle(group.root, t)}</span>
-                  </span>
-                  <span className="skill-group-actions">
-                    <span className="skill-group-count">{group.skills.length}</span>
-                    <ChevronDown className="skill-group-chevron" size={14} />
-                  </span>
-                </button>
-                {!collapsed && (
-                  <div id={contentId} className="skill-group-items">
-                    {group.skills.map((skill) => (
-                      <SkillListItem
-                        key={skill.id}
-                        skill={skill}
-                        root={group.root}
-                        active={selectedSkill?.path === skill.path}
-                        onPress={() => void selectSkill(skill.path)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-            )
-          })}
-          {filteredSkills.length === 0 && (
-            <div className="empty-state">
+        <ScrollShadow className="skill-list" size={24}>
+          {libraryTree.map((node) => (
+            <SkillLibraryTreeNodeView
+              key={node.id}
+              node={node}
+              depth={0}
+              expandedIds={accordionExpandedIds}
+              selectedPath={selectedSkill?.path}
+              onToggle={toggleGroup}
+              onSelect={(path) => void selectSkill(path)}
+            />
+          ))}
+          {libraryTree.length === 0 && (
+            <div className="empty-state skill-list-empty-state">
               <FolderSearch size={34} />
-              <p>{t('skills.noMatches')}</p>
+              <p>{libraryPerspective === 'project' && projects.length === 0 ? topologyCopy.noProjects : t('skills.noMatches')}</p>
             </div>
           )}
-        </div>
+        </ScrollShadow>
       </section>
 
       <section className="detail-pane">
@@ -353,8 +395,13 @@ function SkillsView(): React.JSX.Element {
                   )}
                 </div>
                 <div className="detail-actions">
-                  <Button size="sm" variant="primary" onPress={() => setApplying((open) => !open)}>
-                    <Download size={15} />
+                  <Button
+                    className={applying ? 'transfer-mode-button active' : 'transfer-mode-button'}
+                    size="sm"
+                    variant={applying ? 'secondary' : 'primary'}
+                    onPress={() => setApplying((open) => !open)}
+                  >
+                    <ArrowRightLeft size={15} />
                     {t('skills.apply.title')}
                   </Button>
                   <IconButton label={t('skills.reveal')} onPress={() => void revealSelectedSkill()}>
@@ -367,7 +414,7 @@ function SkillsView(): React.JSX.Element {
                     <Copy size={17} />
                   </IconButton>
                   <IconButton
-                    label="删除 Skill"
+                    label={skillFileCopy(language).deleteSkill}
                     variant="danger"
                     isDisabled={selectedSkill.readonly || saving}
                     onPress={() => {
@@ -383,44 +430,54 @@ function SkillsView(): React.JSX.Element {
             </div>
 
             <div className="meta-grid">
-              <Meta label={t('market.sourceLabel')} value={selectedSkill.rootLabel} />
-              <Meta label={t('skills.metric.apps')} value={formatRootApps(selectedRoot, t)} />
-              <Meta label={t('market.status')} value={formatAccess(selectedSkill, t)} />
+              <Meta
+                label={t('market.sourceLabel')}
+                value={formatRootDisplayLabel(selectedRoot, selectedSkill.rootLabel, t)}
+                icon={<SettingsRootIcon root={selectedRoot ?? undefined} className="meta-icon" />}
+              />
+              <Meta
+                label={t('skills.metric.apps')}
+                value={formatRootApps(selectedRoot, t)}
+                icon={<SettingsRootIcon root={selectedRoot ?? undefined} className="meta-icon" />}
+              />
               <Meta
                 label={t('skills.modified')}
                 value={formatDate(selectedSkill.modifiedAt, language)}
+                icon={<Clock3 className="meta-icon" />}
               />
             </div>
 
-            {applying && (
+            {applying ? (
               <ApplySkillPanel
                 skill={selectedSkill}
                 onClose={() => setApplying(false)}
                 onApplied={() => void refreshSkills()}
               />
-            )}
-
-            {selectedSkill.issues.length > 0 && (
-              <div className="issues">
-                {selectedSkill.issues.map((issue, index) => (
-                  <div key={`${issue.message}-${index}`} className={`issue ${issue.severity}`}>
-                    <AlertTriangle size={15} />
-                    <span>{issue.message}</span>
+            ) : (
+              <>
+                {selectedSkill.issues.length > 0 && (
+                  <div className="issues">
+                    {selectedSkill.issues.map((issue, index) => (
+                      <div key={`${issue.message}-${index}`} className={`issue ${issue.severity}`}>
+                        <AlertTriangle size={15} />
+                        <span>{localizeSkillWarning(issue.message, language)}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                )}
 
-            <SkillFileBrowser
-              skill={selectedSkill}
-              root={selectedRoot}
-              fileTree={fileTree}
-              selectedPath={selectedFilePath}
-              selectedContent={selectedFileContent}
-              loading={loadingFile}
-              error={fileError}
-              onSelect={setSelectedFilePath}
-            />
+                <SkillFileBrowser
+                  skill={selectedSkill}
+                  root={selectedRoot}
+                  fileTree={fileTree}
+                  selectedPath={selectedFilePath}
+                  selectedContent={selectedFileContent}
+                  loading={loadingFile}
+                  error={fileError}
+                  onSelect={setSelectedFilePath}
+                />
+              </>
+            )}
           </>
         )}
       </section>
@@ -447,6 +504,9 @@ function SkillFileBrowser({
   error: string | null
   onSelect: (path: string) => void
 }): React.JSX.Element {
+  const language = resolveAppLanguage(useAppStore((state) => state.preferences.language))
+  const copy = skillFileCopy(language)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
   const selectedNode = findFileNode(fileTree, selectedPath)
   const isSkillMarkdown = selectedPath === skillMarkdownPath
   const title = selectedNode?.name || selectedContent?.name || skillMarkdownPath
@@ -464,16 +524,28 @@ function SkillFileBrowser({
     : selectedContent
 
   return (
-    <div className="skill-file-browser">
-      <aside className="file-sidebar" aria-label="Skill 文件列表">
+    <div className={`skill-file-browser${sidebarCollapsed ? ' file-sidebar-collapsed' : ''}`}>
+      <aside className="file-sidebar" aria-label={copy.fileList}>
         <div className="file-sidebar-header">
           <div>
-            <strong>技能内容</strong>
+            <strong>{copy.content}</strong>
             <span>{formatSkillRelativePath(skill, root)}</span>
           </div>
-          {loading && <small>加载中</small>}
+          <div className="file-sidebar-actions">
+            {loading && <small>{copy.loading}</small>}
+            <Button
+              className="file-sidebar-toggle"
+              aria-label={copy.collapse}
+              isIconOnly
+              size="sm"
+              variant="ghost"
+              onPress={() => setSidebarCollapsed(true)}
+            >
+              <PanelLeftClose size={15} />
+            </Button>
+          </div>
         </div>
-        <div className="file-tree">
+        <ScrollShadow className="file-tree" size={24}>
           {fileTree.map((node) => (
             <FileTreeNode
               key={node.relativePath}
@@ -483,27 +555,41 @@ function SkillFileBrowser({
               onSelect={onSelect}
             />
           ))}
-          {fileTree.length === 0 && !loading && <div className="file-empty">无文件</div>}
-        </div>
+          {fileTree.length === 0 && !loading && <div className="file-empty">{copy.empty}</div>}
+        </ScrollShadow>
       </aside>
 
       <section className="file-preview">
         <div className="file-preview-header">
-          <div>
-            <strong>{title}</strong>
-            <span>{subtitle}</span>
+          <div className="file-preview-title">
+            {sidebarCollapsed && (
+              <Button
+                className="file-sidebar-toggle"
+                aria-label={copy.expand}
+                isIconOnly
+                size="sm"
+                variant="ghost"
+                onPress={() => setSidebarCollapsed(false)}
+              >
+                <PanelLeftOpen size={15} />
+              </Button>
+            )}
+            <div>
+              <strong>{title}</strong>
+              <span>{subtitle}</span>
+            </div>
           </div>
           <span className="file-kind-badge">
             {isSkillMarkdown
               ? 'Markdown'
-              : formatFileKind(selectedContent?.kind || selectedNode?.kind)}
+              : formatFileKind(selectedContent?.kind || selectedNode?.kind, language)}
           </span>
         </div>
 
         {error && !isSkillMarkdown ? (
           <div className="file-preview-state">{error}</div>
         ) : loading && !isSkillMarkdown ? (
-          <div className="file-preview-state">加载中</div>
+          <div className="file-preview-state">{copy.loading}</div>
         ) : (
           <FilePreviewContent file={previewFile} />
         )}
@@ -566,13 +652,30 @@ function FileKindIcon({ kind }: { kind?: SkillFileKind }): React.JSX.Element {
 }
 
 function FilePreviewContent({ file }: { file: SkillFileContent | null }): React.JSX.Element {
-  if (!file) return <div className="file-preview-state">选择一个文件</div>
+  const language = resolveAppLanguage(useAppStore((state) => state.preferences.language))
+  const copy = skillFileCopy(language)
+  const labels = fileViewLabels(language)
+  const [view, setView] = useState<'preview' | 'source'>('preview')
+  useEffect(() => setView('preview'), [file?.relativePath])
+  if (!file) return <div className="file-preview-state">{copy.select}</div>
+
+  const html = /\.html?$/i.test(file.name)
+  const svg = file.name.toLowerCase().endsWith('.svg')
+  if ((html && file.content) || (svg && file.content && file.dataUrl)) {
+    return <div>
+      <div className="file-view-switch"><button type="button" className={view === 'preview' ? 'active' : ''} onClick={() => setView('preview')}>{labels.preview}</button><button type="button" className={view === 'source' ? 'active' : ''} onClick={() => setView('source')}>{labels.source}</button></div>
+      {view === 'source' ? <ScrollShadow className="file-preview-code text" orientation="horizontal" size={24}><pre>{file.content}</pre></ScrollShadow> : html ? <iframe className="file-html-preview" sandbox="" srcDoc={sandboxLocalHtml(file.content)} title={file.name} /> : <div className="file-image-preview"><img src={file.dataUrl} alt={file.name} /></div>}
+    </div>
+  }
 
   if (file.content === null) {
+    if (file.kind === 'image' && file.dataUrl) {
+      return <div className="file-image-preview"><img src={file.dataUrl} alt={file.name} /></div>
+    }
     return (
       <div className="file-preview-state">
         <FileKindIcon kind={file.kind} />
-        <span>{formatFileKind(file.kind)} 文件暂不支持预览</span>
+        <span>{marketText(copy.unsupported, { kind: formatFileKind(file.kind, language) })}</span>
         <small>{formatBytes(file.size)}</small>
       </div>
     )
@@ -580,72 +683,26 @@ function FilePreviewContent({ file }: { file: SkillFileContent | null }): React.
 
   if (file.kind === 'markdown') {
     return (
-      <div className="markdown-preview">
-        <MarkdownPreview content={file.content} />
-        {file.truncated && <div className="file-truncated-note">文件较大，已截断预览</div>}
-      </div>
+      <ScrollShadow className="markdown-preview" size={24}>
+        <MarkdownRenderer content={file.content} />
+        {file.truncated && <div className="file-truncated-note">{copy.truncated}</div>}
+      </ScrollShadow>
     )
   }
 
   return (
-    <pre className={`file-preview-code ${file.kind}`}>
+    <ScrollShadow className={`file-preview-code ${file.kind}`} orientation="horizontal" size={24}>
+      <pre>
       {file.content}
-      {file.truncated ? '\n\n-- 文件较大，已截断预览 --' : ''}
-    </pre>
+      {file.truncated ? `\n\n-- ${copy.truncated} --` : ''}
+      </pre>
+    </ScrollShadow>
   )
 }
 
-function MarkdownPreview({ content }: { content: string }): React.JSX.Element {
-  const blocks = parseMarkdownBlocks(content)
-
-  return (
-    <div className="markdown-preview-content">
-      {blocks.map((block, index) => {
-        if (block.type === 'frontmatter') {
-          return (
-            <pre key={index} className="markdown-frontmatter">
-              {block.content}
-            </pre>
-          )
-        }
-
-        if (block.type === 'code') {
-          return (
-            <pre key={index} className="markdown-code-block">
-              <code>{block.content}</code>
-            </pre>
-          )
-        }
-
-        if (block.type === 'heading') {
-          const children = renderInlineMarkdown(block.content)
-          if (block.level === 1) return <h1 key={index}>{children}</h1>
-          if (block.level === 2) return <h2 key={index}>{children}</h2>
-          if (block.level === 3) return <h3 key={index}>{children}</h3>
-          return <h4 key={index}>{children}</h4>
-        }
-
-        if (block.type === 'list') {
-          const Tag = block.ordered ? 'ol' : 'ul'
-          return (
-            <Tag key={index}>
-              {block.items.map((item, itemIndex) => (
-                <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
-              ))}
-            </Tag>
-          )
-        }
-
-        if (block.type === 'quote') {
-          return <blockquote key={index}>{renderInlineMarkdown(block.content)}</blockquote>
-        }
-
-        if (block.type === 'rule') return <hr key={index} />
-
-        return <p key={index}>{renderInlineMarkdown(block.content)}</p>
-      })}
-    </div>
-  )
+function sandboxLocalHtml(content: string): string {
+  const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:">`
+  return /<head[\s>]/i.test(content) ? content.replace(/<head([^>]*)>/i, `<head$1>${policy}`) : `${policy}${content}`
 }
 
 function ApplySkillPanel({
@@ -657,10 +714,15 @@ function ApplySkillPanel({
   onClose: () => void
   onApplied: () => void
 }): React.JSX.Element {
+  const t = useTranslator()
+  const projects = useAppStore((state) => state.projects)
   const [agents, setAgents] = useState<SkillAgentAdapter[]>([])
   const [selectedAgents, setSelectedAgents] = useState<string[]>([])
-  const [running, setRunning] = useState(false)
+  const [runningCommand, setRunningCommand] = useState<'add' | 'remove' | null>(null)
   const [result, setResult] = useState<SkillsCommandResult | null>(null)
+  const [targetScope, setTargetScope] = useState<'system' | 'project'>('system')
+  const [projectId, setProjectId] = useState('')
+  const selectedProject = projects.find((project) => project.id === projectId)
 
   useEffect(() => {
     let mounted = true
@@ -685,29 +747,24 @@ function ApplySkillPanel({
     }
   }, [])
 
-  async function run(command: 'add' | 'remove'): Promise<void> {
-    const input: SkillsCommandInput =
-      command === 'add'
-        ? {
-            command,
-            source: skill.path,
-            agents: selectedAgents,
-            global: true,
-            copy: true,
-            yes: true
-          }
-        : {
-            command,
-            skills: [skill.name],
-            agents: selectedAgents,
-            global: true,
-            yes: true
-          }
+  useEffect(() => {
+    const availableIds = agents
+      .filter((agent) => targetScope === 'system' ? Boolean(agent.globalPath) : Boolean(projectId && agent.projectPath))
+      .map((agent) => agent.id)
+    setSelectedAgents((current) => current.filter((id) => availableIds.includes(id)))
+  }, [agents, projectId, targetScope])
 
-    setRunning(true)
-    const nextResult = await window.aiHelper.invoke<SkillsCommandResult>('ecosystem:run', input)
+  async function run(command: 'add' | 'remove'): Promise<void> {
+    setRunningCommand(command)
+    const nextResult = await window.aiHelper.invoke<SkillsCommandResult>('skill:transfer', {
+      operation: command,
+      skillPath: skill.path,
+      applicationIds: selectedAgents,
+      scope: targetScope,
+      projectId: targetScope === 'project' ? projectId : undefined
+    })
     setResult(nextResult)
-    setRunning(false)
+    setRunningCommand(null)
     onApplied()
   }
 
@@ -718,80 +775,175 @@ function ApplySkillPanel({
   }
 
   return (
-    <Card className="apply-panel" variant="secondary">
+    <Card className="apply-workspace" variant="secondary">
       <Card.Header className="apply-header">
-        <div>
-          <Card.Title>转移技能</Card.Title>
-          <Card.Description>把当前 Skill 转移到已检测的软件目录。</Card.Description>
+        <div className="apply-heading-copy">
+          <Card.Title>{t('skills.apply.heading')}</Card.Title>
+          <Card.Description>{t('skills.apply.description')}</Card.Description>
         </div>
-        <Button className="apply-close-button" variant="secondary" size="sm" onPress={onClose}>
-          <X size={14} />
-          关闭
+        <Button
+          className="apply-close-button"
+          aria-label={t('skills.apply.close')}
+          isIconOnly
+          variant="ghost"
+          size="sm"
+          onPress={onClose}
+        >
+          <X size={16} />
         </Button>
       </Card.Header>
 
-      <Card.Content className="apply-content">
-        <div className="apply-agent-grid">
-          {agents.map((agent) => (
-            <Button
-              key={agent.id}
-              className="apply-agent"
-              variant={selectedAgents.includes(agent.id) ? 'secondary' : 'ghost'}
-              size="sm"
-              onPress={() => toggleAgent(agent.id)}
+      <Card.Content className="apply-content-shell">
+        <ScrollShadow className="apply-content" size={24}>
+        <div className="apply-selection-bar">
+          <span>{t('skills.apply.select')}</span>
+          <Chip color="accent" size="sm" variant="soft">
+            <Chip.Label>{t('skills.apply.selected', { count: selectedAgents.length })}</Chip.Label>
+          </Chip>
+        </div>
+        <div className="install-options">
+          <Tabs
+            className="apply-scope-tabs"
+            aria-label={t('skills.apply.select')}
+            selectedKey={targetScope}
+            onSelectionChange={(key) => {
+              const nextScope = key === 'project' ? 'project' : 'system'
+              setTargetScope(nextScope)
+              if (nextScope === 'project' && !projectId && projects[0]) setProjectId(projects[0].id)
+            }}
+          >
+            <Tabs.ListContainer><Tabs.List>
+              <Tabs.Tab id="system">{t('skills.scope.system')}<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id="project">{t('skills.scope.project')}<Tabs.Indicator /></Tabs.Tab>
+            </Tabs.List></Tabs.ListContainer>
+          </Tabs>
+          {targetScope === 'project' && (
+            <Select
+              className="project-picker"
+              aria-label={t('topology.projectDirectories')}
+              selectedKey={projectId || null}
+              onSelectionChange={(key) => setProjectId(key ? String(key) : '')}
             >
-              <SoftwareIcon agent={agent} className="apply-agent-icon" />
-              <span className="apply-agent-copy">
-                <strong>{agent.name}</strong>
-                <small>{agent.globalPath || agent.projectPath}</small>
-              </span>
-            </Button>
-          ))}
-          {agents.length === 0 && (
-            <div className="apply-empty">
-              未检测到可应用的软件。可以在设置与备份里添加技能目录。
-            </div>
+              <Select.Trigger>
+                <Select.Value>{projects.find((project) => project.id === projectId)?.name || t('topology.projectDirectories')}</Select.Value>
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover placement="bottom start">
+                <ScrollShadow className="project-picker-scroll" size={20}>
+                  <ListBox aria-label={t('topology.projectDirectories')}>
+                    {projects.map((project) => (
+                      <ListBox.Item key={project.id} id={project.id} textValue={`${project.name} — ${project.path}`}>
+                        <span className="project-picker-option">
+                          <strong>{project.name}</strong>
+                          <small>{project.path}</small>
+                        </span>
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </ScrollShadow>
+              </Select.Popover>
+            </Select>
           )}
         </div>
-
-        <div className="apply-actions">
-          <Button
-            variant="primary"
-            size="sm"
-            isDisabled={selectedAgents.length === 0 || running}
-            onPress={() => void run('add')}
-          >
-            <Download size={14} />
-            {running ? '执行中' : '转移到选中软件'}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            isDisabled={selectedAgents.length === 0 || running}
-            onPress={() => void run('remove')}
-          >
-            <Trash2 size={14} />
-            从选中软件移除
-          </Button>
+        <div className="apply-agent-grid">
+          {agents.map((agent) => {
+            const selected = selectedAgents.includes(agent.id)
+            const targetPath = targetScope === 'system'
+              ? agent.globalPath
+              : selectedProject && agent.projectPath
+                ? resolveProjectSkillPath(selectedProject.path, agent.projectPath)
+                : null
+            const displayPath = targetScope === 'project' && selectedProject && targetPath
+              ? `${selectedProject.name}/${projectRelativeDisplayPath(selectedProject.path, targetPath)}`
+              : targetPath
+                ? systemRelativeDisplayPath(targetPath)
+                : null
+            return (
+              <Checkbox
+                key={agent.id}
+                className={`apply-agent${selected ? ' selected' : ''}`}
+                id={`apply-agent-${agent.id}`}
+                isDisabled={runningCommand !== null || !targetPath}
+                isSelected={selected}
+                variant="secondary"
+                onChange={(isSelected) => {
+                  if (isSelected !== selected) toggleAgent(agent.id)
+                }}
+              >
+                <Checkbox.Content className="apply-agent-content">
+                  <SoftwareIcon agent={agent} className="apply-agent-icon" />
+                  <span className="apply-agent-copy">
+                    <strong>{agent.name}</strong>
+                    <small>{displayPath || t('topology.projectPath')}</small>
+                  </span>
+                  <Checkbox.Control className="apply-agent-control">
+                    <Checkbox.Indicator />
+                  </Checkbox.Control>
+                </Checkbox.Content>
+              </Checkbox>
+            )
+          })}
+          {agents.length === 0 && <div className="apply-empty">{t('skills.apply.empty')}</div>}
         </div>
 
         {result && <InlineCommandOutput result={result} />}
+        </ScrollShadow>
       </Card.Content>
+
+      <footer className="apply-footer">
+        <span>{t('skills.apply.selected', { count: selectedAgents.length })}</span>
+        <div className="apply-actions">
+          <Button
+            isPending={runningCommand === 'remove'}
+            variant="ghost"
+            size="sm"
+            isDisabled={selectedAgents.length === 0 || runningCommand !== null || (targetScope === 'project' && !projectId)}
+            onPress={() => void run('remove')}
+          >
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size="sm" /> : <Trash2 size={14} />}
+                {isPending ? t('skills.apply.removing') : t('skills.apply.remove')}
+              </>
+            )}
+          </Button>
+          <Button
+            isPending={runningCommand === 'add'}
+            variant="primary"
+            size="sm"
+            isDisabled={selectedAgents.length === 0 || runningCommand !== null || (targetScope === 'project' && !projectId)}
+            onPress={() => void run('add')}
+          >
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size="sm" /> : <CopyPlus size={14} />}
+                {isPending ? t('skills.apply.transferring') : t('skills.apply.add')}
+              </>
+            )}
+          </Button>
+        </div>
+      </footer>
     </Card>
   )
 }
 
 function InlineCommandOutput({ result }: { result: SkillsCommandResult }): React.JSX.Element {
+  const t = useTranslator()
   const output = `${result.stdout}${result.stderr ? `\n${result.stderr}` : ''}`.trim()
 
   return (
-    <Card className="inline-command-output" variant="tertiary">
-      <Card.Header>
-        <Card.Title>{result.exitCode === 0 ? '执行完成' : '执行失败'}</Card.Title>
-        <Card.Description>{result.command}</Card.Description>
-      </Card.Header>
-      <pre>{output || '命令没有输出。'}</pre>
-    </Card>
+    <div className={`inline-command-output${result.exitCode === 0 ? ' success' : ' failure'}`}>
+      <div className="inline-command-summary">
+        {result.exitCode === 0 ? <Check size={15} /> : <AlertTriangle size={15} />}
+        <strong>{result.exitCode === 0 ? t('command.done') : t('command.failed')}</strong>
+      </div>
+      <details>
+        <summary>{t('skills.apply.details')}</summary>
+        <code>{result.command}</code>
+        <ScrollShadow className="inline-command-scroll" orientation="horizontal" size={20}><pre>{output || t('command.empty')}</pre></ScrollShadow>
+      </details>
+    </div>
   )
 }
 
@@ -832,14 +984,97 @@ function QuietSelect({
   )
 }
 
+function SkillLibraryTreeNodeView({
+  node,
+  depth,
+  expandedIds,
+  selectedPath,
+  onToggle,
+  onSelect
+}: {
+  node: SkillLibraryNode
+  depth: number
+  expandedIds: Set<string>
+  selectedPath?: string
+  onToggle: (id: string) => void
+  onSelect: (path: string) => void
+}): React.JSX.Element {
+  const t = useTranslator()
+  const expanded = expandedIds.has(node.id)
+  const contentId = `skill-group-${node.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+  const count = countLibraryNodeSkills(node)
+  const Icon = node.kind === 'application'
+    ? AppWindow
+    : node.kind === 'shared'
+      ? Share2
+      : node.kind === 'project'
+        ? Folder
+        : BookText
+  const applicationIcon = node.kind === 'application'
+    ? renderApplicationIcon([node.applicationId, node.label], 22)
+    : null
+  return (
+    <section className={`skill-group skill-tree-depth-${Math.min(depth, 3)} skill-tree-kind-${node.kind}`} aria-label={node.label}>
+      <button
+        type="button"
+        className="skill-group-heading"
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        onClick={() => onToggle(node.id)}
+      >
+        <span className="skill-group-icon settings-row-icon-fallback">
+          {applicationIcon || <Icon size={18} />}
+        </span>
+        <span className="skill-group-title">
+          <strong>{node.label}</strong>
+          <span>{node.path || (node.kind === 'system' ? t('skills.tree.systemDirectory') : node.kind === 'project' ? t('skills.tree.projectDirectory') : node.kind === 'shared' ? t('root.shared') : t('skills.tree.application'))}</span>
+        </span>
+        <span className="skill-group-actions">
+          <span className="skill-group-count">{count}</span>
+          <ChevronDown className="skill-group-chevron" size={14} />
+        </span>
+      </button>
+      {expanded && (
+        <div id={contentId} className="skill-group-items">
+          {node.skills.map((skill) => (
+            <SkillListItem
+              key={`${node.id}:${skill.id}`}
+              skill={skill}
+              active={selectedPath === skill.path}
+              onPress={() => onSelect(skill.path)}
+            />
+          ))}
+          {node.children.map((child) => (
+            <SkillLibraryTreeNodeView
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              expandedIds={expandedIds}
+              selectedPath={selectedPath}
+              onToggle={onToggle}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function countLibraryNodeSkills(node: SkillLibraryNode): number {
+  return node.skills.length + node.children.reduce((total, child) => total + countLibraryNodeSkills(child), 0)
+}
+
+function flattenLibraryNodeIds(nodes: SkillLibraryNode[]): string[] {
+  return nodes.flatMap((node) => [node.id, ...flattenLibraryNodeIds(node.children)])
+}
+
 function SkillListItem({
   skill,
-  root,
   active,
   onPress
 }: {
   skill: SkillSummary
-  root?: SkillRoot
   active: boolean
   onPress: () => void
 }): React.JSX.Element {
@@ -854,78 +1089,114 @@ function SkillListItem({
         </div>
         {skill.issues.length > 0 && <AlertTriangle size={16} className="warn-icon" />}
       </div>
-      <div className="row-meta">
+      {skill.readonly && <div className="row-meta">
         <Chip size="sm" variant="tertiary" color="default">
-          {skill.rootLabel}
+          {t('access.readonly')}
         </Chip>
-        {root && (
-          <Chip size="sm" variant="tertiary" color="default">
-            {formatRootKind(root, t)}
-          </Chip>
-        )}
-        {root?.shared && (
-          <Chip size="sm" variant="tertiary" color="default">
-            {root.appNames.length || 'Multiple'} shared
-          </Chip>
-        )}
-        {skill.system && (
-          <Chip size="sm" variant="tertiary" color="default">
-            System
-          </Chip>
-        )}
-        {skill.readonly && (
-          <Chip size="sm" variant="tertiary" color="default">
-            {t('access.readonly')}
-          </Chip>
-        )}
-      </div>
+      </div>}
     </Button>
   )
 }
 
-type SettingsSectionId = 'general' | 'resources' | 'directories' | 'backups'
+type SettingsSectionId = 'general' | 'resources' | 'applications' | 'projects' | 'backups'
 
-function SettingsView(): React.JSX.Element {
+function SettingsView({ scope }: { scope: 'general' | 'skills' }): React.JSX.Element {
   const t = useTranslator()
   const {
     backups,
     skillRoots,
+    applications,
+    projects,
     skills,
     preferences,
     appMetrics,
-    addSkillRoot,
+    projectDiscovery,
+    projectScanRoots,
+    projectScanRunning,
+    addProject,
+    removeProject,
+    saveApplicationRule,
+    removeApplicationRule,
     loadAppMetrics,
-    updatePreferences
+    updatePreferences,
+    refreshSkills,
+    cancelProjectScan,
+    addProjectScanRoot,
+    removeProjectScanRoot
   } = useAppStore()
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>('general')
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>(scope === 'general' ? 'general' : 'applications')
+  const [showRuleForm, setShowRuleForm] = useState(false)
+  const [ruleName, setRuleName] = useState('')
+  const [systemPath, setSystemPath] = useState('')
+  const [projectPath, setProjectPath] = useState('')
+  const [resourceCleaning, setResourceCleaning] = useState<string | null>(null)
+  const [resourceNotice, setResourceNotice] = useState('')
   const customRoots = skillRoots.filter((root) => root.source === 'custom')
   const existingRoots = skillRoots.filter((root) => root.exists)
-  const language = preferences.language
-  const settingsSections: Array<{
+  const language = resolveAppLanguage(preferences.language)
+  const topologyCopy = skillTopologyCopy(t)
+  const allSettingsSections: Array<{
     id: SettingsSectionId
     label: string
     icon: React.ElementType
   }> = [
     { id: 'general', label: t('settings.tabs.general'), icon: SlidersHorizontal },
     { id: 'resources', label: t('settings.tabs.resources'), icon: HardDrive },
-    { id: 'directories', label: t('settings.tabs.directories'), icon: FolderSearch },
+    { id: 'applications', label: topologyCopy.applications, icon: AppWindow },
+    { id: 'projects', label: topologyCopy.projects, icon: FolderSearch },
     { id: 'backups', label: t('settings.tabs.backups'), icon: ArchiveRestore }
   ]
+  const settingsSections = allSettingsSections.filter((section) => scope === 'general' ? section.id === 'general' || section.id === 'resources' : section.id === 'applications' || section.id === 'projects' || section.id === 'backups')
+
+  useEffect(() => setActiveSection(scope === 'general' ? 'general' : 'applications'), [scope])
+
+  useEffect(() => {
+    if (activeSection === 'resources') void loadAppMetrics()
+  }, [activeSection, loadAppMetrics])
+
+  async function cleanResource(id: 'market-catalogs' | 'market-previews' | 'browser-cache' | 'logs' | 'all'): Promise<void> {
+    const before = appMetrics?.storage.totalBytes ?? 0
+    setResourceCleaning(id)
+    setResourceNotice('')
+    try {
+      const storage = await window.aiHelper.invoke<AppMetrics['storage']>('app:clearResource', id)
+      await loadAppMetrics()
+      setResourceNotice(t('settings.resources.cleaned', { size: formatBytes(Math.max(0, before - storage.totalBytes)) }))
+    } finally {
+      setResourceCleaning(null)
+    }
+  }
+
+  async function submitApplicationRule(): Promise<void> {
+    if (!ruleName.trim() || (!systemPath.trim() && !projectPath.trim())) return
+    await saveApplicationRule({
+      id: `custom-${crypto.randomUUID()}`,
+      name: ruleName.trim(),
+      source: 'custom',
+      detectionPaths: [],
+      systemSkillPaths: systemPath.trim() ? [systemPath.trim()] : [],
+      projectSkillPaths: projectPath.trim() ? [projectPath.trim()] : []
+    })
+    setRuleName('')
+    setSystemPath('')
+    setProjectPath('')
+    setShowRuleForm(false)
+  }
 
   return (
     <div className="single-pane settings-pane">
       <div className="pane-heading">
         <div>
-          <h2>{t('settings.title')}</h2>
-          <p>{t('settings.description')}</p>
+          {scope === 'skills' ? <div className="module-title"><Settings2 size={24} /><h2>{t('settings.skill.title')}</h2></div> : <h2>{t('settings.title')}</h2>}
+          <p>{scope === 'general' ? t('settings.description') : t('settings.skill.description')}</p>
         </div>
-        <Button size="md" variant="primary" onPress={() => void addSkillRoot()}>
-          <Plus size={16} />
-          {t('settings.addSkillRoot')}
-        </Button>
+        {scope === 'skills' && <div className="heading-actions">
+          <Button size="sm" variant="secondary" onPress={() => { setActiveSection('applications'); setShowRuleForm(true) }}><Plus size={16} />{topologyCopy.addApplication}</Button>
+          <Button size="sm" variant="primary" onPress={() => { setActiveSection('projects'); void addProject() }}><Folder size={16} />{topologyCopy.addProject}</Button>
+        </div>}
       </div>
 
-      <div className="settings-grid">
+      {scope === 'skills' && <div className="settings-grid">
         <MetricCard value={skills.length} label={t('settings.metrics.skills')} icon={BookText} />
         <MetricCard
           value={existingRoots.length}
@@ -933,8 +1204,8 @@ function SettingsView(): React.JSX.Element {
           icon={FolderSearch}
         />
         <MetricCard
-          value={customRoots.length}
-          label={t('settings.metrics.customRoots')}
+          value={applications.length}
+          label={topologyCopy.applications}
           icon={Folder}
         />
         <MetricCard
@@ -942,7 +1213,7 @@ function SettingsView(): React.JSX.Element {
           label={t('settings.metrics.backups')}
           icon={ArchiveRestore}
         />
-      </div>
+      </div>}
 
       <div className="settings-layout">
         <aside className="settings-nav" aria-label={t('settings.title')}>
@@ -962,7 +1233,7 @@ function SettingsView(): React.JSX.Element {
           })}
         </aside>
 
-        <section className="settings-detail">
+        <ScrollShadow className={`settings-detail${activeSection === 'applications' || activeSection === 'projects' || activeSection === 'backups' ? ' scroll-contained' : ''}`} size={24}>
           {activeSection === 'general' && (
             <div className="settings-section">
               <div className="settings-section-heading">
@@ -996,10 +1267,18 @@ function SettingsView(): React.JSX.Element {
                   <QuietSelect
                     ariaLabel={t('settings.language')}
                     value={preferences.language}
-                    onChange={(value) => void updatePreferences({ language: value as AppLanguage })}
+                    onChange={(value) => void updatePreferences({ language: value as AppLanguagePreference })}
                     items={[
+                      { id: 'system', label: t('settings.language.system') },
                       { id: 'zh-CN', label: t('settings.language.zh') },
-                      { id: 'en-US', label: t('settings.language.en') }
+                      { id: 'zh-TW', label: t('settings.language.zhTW') },
+                      { id: 'en-US', label: t('settings.language.en') },
+                      { id: 'ja-JP', label: t('settings.language.ja') },
+                      { id: 'fr-FR', label: t('settings.language.fr') },
+                      { id: 'ko-KR', label: t('settings.language.ko') },
+                      { id: 'es-ES', label: t('settings.language.es') },
+                      { id: 'pt-BR', label: t('settings.language.pt') },
+                      { id: 'ar', label: t('settings.language.ar') }
                     ]}
                   />
                 }
@@ -1010,24 +1289,15 @@ function SettingsView(): React.JSX.Element {
                 title={t('settings.autoScan')}
                 description={t('settings.autoScan.description')}
                 control={
-                  <div className="settings-segmented">
-                    <button
-                      type="button"
-                      className={preferences.autoScanOnStart ? 'active' : ''}
-                      onClick={() => void updatePreferences({ autoScanOnStart: true })}
-                    >
-                      {t('settings.status.on')}
-                    </button>
-                    <button
-                      type="button"
-                      className={!preferences.autoScanOnStart ? 'active' : ''}
-                      onClick={() => void updatePreferences({ autoScanOnStart: false })}
-                    >
-                      {t('settings.status.off')}
-                    </button>
-                  </div>
+                  <Tabs className="settings-auto-scan-tabs" aria-label={t('settings.autoScan')} selectedKey={preferences.autoScanOnStart ? 'on' : 'off'} onSelectionChange={(key) => void updatePreferences({ autoScanOnStart: key === 'on' })}>
+                    <Tabs.ListContainer><Tabs.List>
+                      <Tabs.Tab id="on">{t('settings.status.on')}<Tabs.Indicator /></Tabs.Tab>
+                      <Tabs.Tab id="off">{t('settings.status.off')}<Tabs.Indicator /></Tabs.Tab>
+                    </Tabs.List></Tabs.ListContainer>
+                  </Tabs>
                 }
               />
+
             </div>
           )}
 
@@ -1063,6 +1333,14 @@ function SettingsView(): React.JSX.Element {
                   label={t('settings.resources.external')}
                   value={formatBytes(appMetrics?.memory.external || 0)}
                 />
+                <ResourceMetric
+                  label={t('settings.resources.arrayBuffers')}
+                  value={formatBytes(appMetrics?.memory.arrayBuffers || 0)}
+                />
+                <ResourceMetric
+                  label={t('settings.resources.uptime')}
+                  value={formatDuration(appMetrics?.uptime || 0)}
+                />
               </div>
 
               <div className="settings-info-list">
@@ -1075,42 +1353,158 @@ function SettingsView(): React.JSX.Element {
                   value={appMetrics ? `${appMetrics.platform} / ${appMetrics.arch}` : '-'}
                 />
               </div>
-            </div>
-          )}
 
-          {activeSection === 'directories' && (
-            <div className="settings-section">
-              <div className="settings-section-heading">
+              <div className="resource-subsection-heading">
                 <div>
-                  <h3>{t('settings.directories.title')}</h3>
-                  <p>{t('settings.directories.description')}</p>
+                  <h4><Cpu size={16} />{t('settings.resources.processes')}</h4>
                 </div>
               </div>
-              <div className="root-list">
-                {existingRoots.map((root) => (
-                  <div key={root.id} className="root-row">
-                    <SettingsRootIcon root={root} />
-                    <div className="settings-row-main">
-                      <strong>{root.label}</strong>
-                      <p>{root.path}</p>
-                      <p>{formatRootApps(root, t)}</p>
+              <div className="resource-process-list">
+                {(appMetrics?.processes || []).map((item) => (
+                  <div className="resource-process-row" key={`${item.type}-${item.pid}`}>
+                    <div>
+                      <strong>{formatProcessName(item.type, item.name)}</strong>
+                      <span>PID {item.pid}</span>
                     </div>
-                    <span className="settings-row-meta">{formatRootKind(root, t)}</span>
+                    <span><b>{t('settings.resources.cpu')}</b>{item.cpuPercent.toFixed(1)}%</span>
+                    <span><b>{t('settings.resources.memory')}</b>{formatBytes(item.memory?.workingSet || 0)}</span>
                   </div>
                 ))}
               </div>
+
+              <div className="resource-subsection-heading resource-storage-heading">
+                <div>
+                  <h4><Database size={16} />{t('settings.resources.storage')}</h4>
+                  <p>{t('settings.resources.storageDescription')}</p>
+                </div>
+                <div className="resource-storage-actions">
+                  {resourceNotice && <span>{resourceNotice}</span>}
+                  <strong>{t('settings.resources.storageTotal')}: {formatBytes(appMetrics?.storage.totalBytes || 0)}</strong>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    isPending={resourceCleaning === 'all'}
+                    isDisabled={Boolean(resourceCleaning) || !appMetrics?.storage.totalBytes}
+                    onPress={() => void cleanResource('all')}
+                  >
+                    <Eraser size={15} />{resourceCleaning === 'all' ? t('settings.resources.cleaning') : t('settings.resources.cleanAll')}
+                  </Button>
+                </div>
+              </div>
+              <div className="resource-storage-list">
+                {(appMetrics?.storage.categories || []).map((category) => {
+                  const copy = resourceCategoryCopy(category.id, t)
+                  return (
+                    <section className="resource-storage-card" key={category.id}>
+                        <div className="resource-storage-card-head">
+                          <span className="resource-storage-icon" aria-hidden="true">
+                            {resourceCategoryIcon(category.id)}
+                          </span>
+                          <div className="resource-storage-main">
+                            <strong>{copy.title}</strong>
+                            <p>{copy.description}</p>
+                          </div>
+                          <strong className="resource-storage-size">{formatBytes(category.bytes)}</strong>
+                        </div>
+                        <span className="resource-storage-path" title={category.path}>{category.path}</span>
+                        <div className="resource-storage-footer">
+                          <span className="resource-storage-meta">
+                          <span>{t('settings.resources.files', { count: category.files })} · {t('settings.resources.directories', { count: category.directories })}</span>
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="tertiary"
+                            isPending={resourceCleaning === category.id}
+                            isDisabled={Boolean(resourceCleaning) || category.bytes === 0}
+                            onPress={() => void cleanResource(category.id)}
+                          >
+                            {resourceCleaning === category.id ? t('settings.resources.cleaning') : t('settings.resources.clean')}
+                          </Button>
+                        </div>
+                    </section>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'applications' && (
+            <div className="settings-section settings-section-scroll">
+              <div className="settings-section-heading">
+                <div>
+                  <h3>{topologyCopy.applicationRules}</h3>
+                  <p>{topologyCopy.applicationDescription}</p>
+                </div>
+              </div>
+              {showRuleForm && <Card className="topology-rule-form" variant="secondary">
+                <Card.Content>
+                  <TextField><Input value={ruleName} onChange={(event) => setRuleName(event.target.value)} placeholder={topologyCopy.applicationName} /></TextField>
+                  <TextField><Input value={systemPath} onChange={(event) => setSystemPath(event.target.value)} placeholder={topologyCopy.systemPath} /></TextField>
+                  <TextField><Input value={projectPath} onChange={(event) => setProjectPath(event.target.value)} placeholder={topologyCopy.projectPath} /></TextField>
+                  <div className="heading-actions"><Button size="sm" variant="ghost" onPress={() => setShowRuleForm(false)}>{topologyCopy.cancel}</Button><Button size="sm" variant="primary" onPress={() => void submitApplicationRule()}>{topologyCopy.save}</Button></div>
+                </Card.Content>
+              </Card>}
+              <ScrollShadow className="root-list" size={24}>
+                {applications.map((application) => (
+                  <div key={application.id} className="root-row">
+                    <ApplicationRuleIcon application={application} />
+                    <div className="settings-row-main">
+                      <strong>{application.name}</strong>
+                      <p>{topologyCopy.systemLabel}: {application.systemSkillPaths.join(', ') || '-'}</p>
+                      <p>{topologyCopy.projectLabel}: {application.projectSkillPaths.join(', ') || '-'}</p>
+                    </div>
+                    {application.source === 'custom' ? <IconButton label={topologyCopy.remove} variant="danger" onPress={() => void removeApplicationRule(application.id)}><Trash2 size={16} /></IconButton> : <span className="settings-row-meta">{topologyCopy.builtin}</span>}
+                  </div>
+                ))}
+                {customRoots.length > 0 && <div className="legacy-root-heading">{topologyCopy.unclassified}</div>}
+                {customRoots.map((root) => <div key={root.id} className="root-row"><SettingsRootIcon root={root} /><div className="settings-row-main"><strong>{root.label}</strong><p>{root.path}</p></div><span className="settings-row-meta">{topologyCopy.unclassified}</span></div>)}
+              </ScrollShadow>
+            </div>
+          )}
+
+          {activeSection === 'projects' && (
+            <div className="settings-section settings-section-scroll">
+              <div className="settings-section-heading">
+                <div><h3>{topologyCopy.projectDirectories}</h3><p>{topologyCopy.projectDescription}</p></div>
+                <div className="heading-actions">
+                  {projectScanRunning ? (
+                    <Button size="sm" variant="secondary" onPress={() => void cancelProjectScan()}><X size={15} />{t('discovery.cancel')}</Button>
+                  ) : <>
+                    <Button size="sm" variant="secondary" onPress={() => void refreshSkills('quick')}><RefreshCw size={15} />{t('discovery.quickScan')}</Button>
+                    <Button size="sm" variant="primary" onPress={() => void refreshSkills('deep')}><FolderSearch size={15} />{t('discovery.deepScan')}</Button>
+                  </>}
+                </div>
+              </div>
+              <div className="project-discovery-strip">
+                <span className={`project-discovery-dot${projectScanRunning ? ' scanning' : ''}`} />
+                <span>{projectScanRunning ? t('discovery.scanning') : t('discovery.ready')}</span>
+                <span>{t('discovery.found', { count: projectDiscovery.discoveredProjects })}</span>
+                {projectDiscovery.scannedDirectories > 0 && <span>{t('discovery.checked', { count: projectDiscovery.scannedDirectories })}</span>}
+                {projectDiscovery.completedAt && <span>{t('discovery.lastScan', { time: formatDate(projectDiscovery.completedAt, language) })}</span>}
+              </div>
+              <div className="scan-root-heading">
+                <div><strong>{t('discovery.scanLocations')}</strong><p>{t('discovery.scanLocationsDescription')}</p></div>
+                <Button size="sm" variant="ghost" onPress={() => void addProjectScanRoot()}><Plus size={15} />{t('discovery.addLocation')}</Button>
+              </div>
+              {projectScanRoots.length > 0 && <div className="scan-root-list">
+                {projectScanRoots.map((path) => <div key={path} className="scan-root-row"><Folder size={16} /><span title={path}>{path}</span><IconButton label={t('discovery.removeLocation')} variant="danger" onPress={() => void removeProjectScanRoot(path)}><Trash2 size={15} /></IconButton></div>)}
+              </div>}
+              <ScrollShadow className="root-list" size={24}>
+                {flattenProjects(projects).map(({ project, depth }) => <div key={project.id} className="root-row" style={{ paddingLeft: 12 + depth * 18 }}><span className="settings-row-icon settings-row-icon-fallback"><Folder size={24} /></span><div className="settings-row-main"><strong>{project.name}</strong><p>{project.path}</p><p>{project.parentProjectId ? topologyCopy.nestedProject : topologyCopy.rootProject}</p></div><IconButton label={project.source === 'auto' ? t('discovery.ignoreProject') : topologyCopy.removeRegistration} variant="danger" onPress={() => { if (confirm(project.source === 'auto' ? t('discovery.ignoreProjectConfirm') : topologyCopy.removeProjectConfirm)) void removeProject(project.id) }}><Trash2 size={16} /></IconButton></div>)}
+                {projects.length === 0 && <div className="empty-state compact-empty"><FolderSearch size={30} /><p>{topologyCopy.noProjects}</p></div>}
+              </ScrollShadow>
             </div>
           )}
 
           {activeSection === 'backups' && (
-            <div className="settings-section">
+            <div className="settings-section settings-section-scroll">
               <div className="settings-section-heading">
                 <div>
                   <h3>{t('settings.backups.title')}</h3>
                   <p>{t('settings.backups.description')}</p>
                 </div>
               </div>
-              <div className="root-list">
+              <ScrollShadow className="root-list" size={24}>
                 {backups.map((backup) => (
                   <div key={backup.id} className="root-row">
                     <span className="settings-row-icon settings-row-icon-fallback">
@@ -1132,10 +1526,10 @@ function SettingsView(): React.JSX.Element {
                     <p>{t('settings.backups.empty')}</p>
                   </div>
                 )}
-              </div>
+              </ScrollShadow>
             </div>
           )}
-        </section>
+        </ScrollShadow>
       </div>
     </div>
   )
@@ -1191,12 +1585,22 @@ function SettingsRootIcon({
   root?: SkillRoot
   className?: string
 }): React.JSX.Element {
-  const agent = root ? findLobeAgentName(root) : null
+  if (root?.category === 'shared' || root?.shared) {
+    return (
+      <span className={`${className} shared-root-icon`}>
+        <Share2 size={22} strokeWidth={1.8} />
+      </span>
+    )
+  }
 
-  if (agent) {
+  const icon = root
+    ? renderApplicationIcon([root.appIds, root.appNames, root.label], 32)
+    : null
+
+  if (icon) {
     return (
       <span className={className}>
-        <AgentIcon agent={agent} size={32} type="color" />
+        {icon}
       </span>
     )
   }
@@ -1215,17 +1619,17 @@ function SoftwareIcon({
   agent: SkillAgentAdapter
   className: string
 }): React.JSX.Element {
-  const lobeAgent = findLobeAgentNameFromCandidates([
+  const icon = renderApplicationIcon([
     agent.id,
     agent.name,
     agent.globalPath,
     agent.projectPath
-  ])
+  ], 24)
 
-  if (lobeAgent) {
+  if (icon) {
     return (
       <span className={className}>
-        <AgentIcon agent={lobeAgent} size={28} type="color" />
+        {icon}
       </span>
     )
   }
@@ -1235,6 +1639,46 @@ function SoftwareIcon({
       <Folder size={24} strokeWidth={1.8} />
     </span>
   )
+}
+
+function ApplicationRuleIcon({ application }: { application: SkillApplication }): React.JSX.Element {
+  const icon = renderApplicationIcon([
+    application.id,
+    application.name,
+    application.systemSkillPaths,
+    application.projectSkillPaths
+  ], 24)
+
+  if (icon) {
+    return (
+      <span className="settings-row-icon">
+        {icon}
+      </span>
+    )
+  }
+
+  return (
+    <span className="settings-row-icon settings-row-icon-fallback">
+      <AppWindow size={24} strokeWidth={1.8} />
+    </span>
+  )
+}
+
+function renderApplicationIcon(
+  candidates: Array<string | string[] | null | undefined>,
+  size: number
+): React.JSX.Element | null {
+  const text = candidates.flat().filter((candidate): candidate is string => Boolean(candidate)).join(' ').toLowerCase()
+  if (text.includes('lingma')) return <AgentIcon agent="qoder" size={size} type="color" />
+  if (text.includes('iflow')) return <Qwen.Color size={size} />
+  if (text.includes('antigravity')) return <Antigravity.Color size={size} />
+
+  const lobeAgent = findLobeAgentNameFromCandidates(candidates)
+  if (!lobeAgent) return null
+  if (lobeAgent === 'kimi') {
+    return <AgentIcon agent="kimi" size={size} type="mono" style={{ color: '#171717' }} />
+  }
+  return <AgentIcon agent={lobeAgent} size={size} type="color" />
 }
 
 function IconButton({
@@ -1251,7 +1695,7 @@ function IconButton({
   onPress: () => void
 }): React.JSX.Element {
   return (
-    <span title={label}>
+    <Tooltip delay={350} closeDelay={100}>
       <Button
         aria-label={label}
         isDisabled={isDisabled}
@@ -1262,7 +1706,11 @@ function IconButton({
       >
         {children}
       </Button>
-    </span>
+      <Tooltip.Content showArrow placement="bottom">
+        <Tooltip.Arrow />
+        <span>{label}</span>
+      </Tooltip.Content>
+    </Tooltip>
   )
 }
 
@@ -1291,11 +1739,22 @@ function MetricCard({
     </Card>
   )
 }
-function Meta({ label, value }: { label: string; value: string }): React.JSX.Element {
+function Meta({
+  label,
+  value,
+  icon
+}: {
+  label: string
+  value: string
+  icon?: React.ReactNode
+}): React.JSX.Element {
   return (
     <div className="meta-item">
-      <span>{label}</span>
-      <strong>{value}</strong>
+      <span className="meta-label">{label}</span>
+      <div className="meta-value">
+        {icon}
+        <strong>{value}</strong>
+      </div>
     </div>
   )
 }
@@ -1346,144 +1805,115 @@ function ensureSkillMarkdownNode(
   ]
 }
 
-type MarkdownBlock =
-  | { type: 'frontmatter' | 'code' | 'paragraph' | 'quote'; content: string }
-  | { type: 'heading'; level: number; content: string }
-  | { type: 'list'; ordered: boolean; items: string[] }
-  | { type: 'rule' }
-
-function parseMarkdownBlocks(content: string): MarkdownBlock[] {
-  const lines = content.replace(/\r\n/g, '\n').split('\n')
-  const blocks: MarkdownBlock[] = []
-  let index = 0
-
-  if (lines[0]?.trim() === '---') {
-    const end = lines.findIndex((line, lineIndex) => lineIndex > 0 && line.trim() === '---')
-    if (end > 0) {
-      blocks.push({ type: 'frontmatter', content: lines.slice(0, end + 1).join('\n') })
-      index = end + 1
-    }
-  }
-
-  while (index < lines.length) {
-    const line = lines[index]
-    const trimmed = line.trim()
-
-    if (!trimmed) {
-      index += 1
-      continue
-    }
-
-    if (trimmed.startsWith('```')) {
-      const codeLines: string[] = []
-      index += 1
-      while (index < lines.length && !lines[index].trim().startsWith('```')) {
-        codeLines.push(lines[index])
-        index += 1
-      }
-      if (index < lines.length) index += 1
-      blocks.push({ type: 'code', content: codeLines.join('\n') })
-      continue
-    }
-
-    const headingMatch = /^(#{1,4})\s+(.+)$/.exec(trimmed)
-    if (headingMatch) {
-      blocks.push({
-        type: 'heading',
-        level: headingMatch[1].length,
-        content: headingMatch[2]
-      })
-      index += 1
-      continue
-    }
-
-    if (/^[-*_]{3,}$/.test(trimmed)) {
-      blocks.push({ type: 'rule' })
-      index += 1
-      continue
-    }
-
-    if (trimmed.startsWith('>')) {
-      const quoteLines: string[] = []
-      while (index < lines.length && lines[index].trim().startsWith('>')) {
-        quoteLines.push(lines[index].trim().replace(/^>\s?/, ''))
-        index += 1
-      }
-      blocks.push({ type: 'quote', content: quoteLines.join(' ') })
-      continue
-    }
-
-    if (/^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
-      const ordered = /^\d+\.\s+/.test(trimmed)
-      const items: string[] = []
-      while (index < lines.length) {
-        const item = lines[index].trim()
-        const marker = ordered ? /^\d+\.\s+(.+)$/.exec(item) : /^[-*]\s+(.+)$/.exec(item)
-        if (!marker) break
-        items.push(marker[1])
-        index += 1
-      }
-      blocks.push({ type: 'list', ordered, items })
-      continue
-    }
-
-    const paragraphLines: string[] = []
-    while (index < lines.length) {
-      const next = lines[index].trim()
-      if (
-        !next ||
-        next.startsWith('```') ||
-        /^#{1,4}\s+/.test(next) ||
-        /^[-*]\s+/.test(next) ||
-        /^\d+\.\s+/.test(next) ||
-        next.startsWith('>') ||
-        /^[-*_]{3,}$/.test(next)
-      ) {
-        break
-      }
-      paragraphLines.push(next)
-      index += 1
-    }
-    blocks.push({ type: 'paragraph', content: paragraphLines.join(' ') })
-  }
-
-  return blocks
-}
-
-function renderInlineMarkdown(content: string): React.ReactNode[] {
-  const nodes: React.ReactNode[] = []
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*)/g
-  let lastIndex = 0
-  let match: RegExpExecArray | null
-
-  while ((match = pattern.exec(content))) {
-    if (match.index > lastIndex) nodes.push(content.slice(lastIndex, match.index))
-    const token = match[0]
-    if (token.startsWith('`')) {
-      nodes.push(<code key={`${match.index}-code`}>{token.slice(1, -1)}</code>)
-    } else {
-      nodes.push(<strong key={`${match.index}-strong`}>{token.slice(2, -2)}</strong>)
-    }
-    lastIndex = match.index + token.length
-  }
-
-  if (lastIndex < content.length) nodes.push(content.slice(lastIndex))
-  return nodes
-}
-
-function formatFileKind(kind?: SkillFileKind): string {
+function formatFileKind(kind: SkillFileKind | undefined, language: AppLanguage): string {
   if (kind === 'markdown') return 'Markdown'
-  if (kind === 'script') return '脚本'
+  if (kind === 'script') return translate(language, 'format.script')
   if (kind === 'json') return 'JSON'
-  if (kind === 'text') return '文本'
-  if (kind === 'image') return '图片'
-  return '文件'
+  if (kind === 'text') return translate(language, 'format.text')
+  if (kind === 'image') return translate(language, 'format.image')
+  return translate(language, 'format.file')
 }
 
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
   return `${(value / 1024 / 1024).toFixed(1)} MB`
+}
+
+function formatDuration(seconds: number): string {
+  const totalMinutes = Math.floor(seconds / 60)
+  if (totalMinutes < 1) return '< 1 min'
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return hours ? `${hours} h ${minutes} min` : `${minutes} min`
+}
+
+function formatProcessName(type: string, name?: string): string {
+  if (name?.trim()) return name
+  return type.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function resourceCategoryCopy(
+  id: AppMetrics['storage']['categories'][number]['id'],
+  t: ReturnType<typeof useTranslator>
+): { title: string; description: string } {
+  const keys = {
+    'market-catalogs': ['settings.resources.marketCatalogs', 'settings.resources.marketCatalogsDescription'],
+    'market-previews': ['settings.resources.marketPreviews', 'settings.resources.marketPreviewsDescription'],
+    'browser-cache': ['settings.resources.browserCache', 'settings.resources.browserCacheDescription'],
+    logs: ['settings.resources.logs', 'settings.resources.logsDescription']
+  } as const
+  return { title: t(keys[id][0]), description: t(keys[id][1]) }
+}
+
+function resourceCategoryIcon(id: AppMetrics['storage']['categories'][number]['id']): React.JSX.Element {
+  if (id === 'market-catalogs') return <Database size={18} strokeWidth={1.8} />
+  if (id === 'market-previews') return <FileText size={18} strokeWidth={1.8} />
+  if (id === 'browser-cache') return <HardDrive size={18} strokeWidth={1.8} />
+  return <BookText size={18} strokeWidth={1.8} />
+}
+
+function resolveProjectSkillPath(projectRoot: string, relativePath: string): string {
+  if (relativePath.startsWith('/')) return relativePath
+  return `${projectRoot.replace(/\/+$/, '')}/${relativePath.replace(/^\.\//, '').replace(/^\/+/, '')}`
+}
+
+function projectRelativeDisplayPath(projectRoot: string, targetPath: string): string {
+  const normalizedRoot = projectRoot.replace(/\/+$/, '')
+  if (targetPath === normalizedRoot) return '.'
+  if (targetPath.startsWith(`${normalizedRoot}/`)) return targetPath.slice(normalizedRoot.length + 1)
+  return targetPath.replace(/^\.\//, '')
+}
+
+function systemRelativeDisplayPath(targetPath: string): string {
+  return targetPath
+    .replace(/^\/Users\/[^/]+(?=\/|$)/, '~')
+    .replace(/^\/home\/[^/]+(?=\/|$)/, '~')
+    .replace(/^[A-Za-z]:\\Users\\[^\\]+(?=\\|$)/i, '~')
+}
+
+function flattenProjects(projects: SkillProject[]): Array<{ project: SkillProject; depth: number }> {
+  const children = new Map<string | null, SkillProject[]>()
+  for (const project of projects) {
+    const group = children.get(project.parentProjectId) || []
+    group.push(project)
+    children.set(project.parentProjectId, group)
+  }
+  const visit = (parentId: string | null, depth: number): Array<{ project: SkillProject; depth: number }> =>
+    (children.get(parentId) || [])
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .flatMap((project) => [{ project, depth }, ...visit(project.id, depth + 1)])
+  return visit(null, 0)
+}
+
+function skillTopologyCopy(t: ReturnType<typeof useTranslator>) {
+  return {
+    applications: t('topology.applicationRules'),
+    projects: t('topology.projectDirectories'),
+    byApplication: t('topology.byApplication'),
+    byProject: t('topology.byProject'),
+    addApplication: t('topology.addApplicationRule'),
+    addProject: t('topology.addProjectDirectory'),
+    applicationRules: t('topology.applicationRules'),
+    applicationDescription: t('topology.applicationDescription'),
+    applicationName: t('topology.applicationName'),
+    systemPath: t('topology.systemSkillPath'),
+    projectPath: t('topology.projectSkillPath'),
+    cancel: t('topology.cancel'),
+    save: t('topology.saveRule'),
+    systemLabel: t('topology.systemDirectory'),
+    projectLabel: t('topology.projectPath'),
+    builtin: t('topology.builtin'),
+    remove: t('topology.removeRule'),
+    unclassified: t('topology.unclassified'),
+    projectDirectories: t('topology.projectDirectories'),
+    projectDescription: t('topology.projectDescription'),
+    nestedProject: t('topology.nestedProject'),
+    rootProject: t('topology.rootProject'),
+    removeRegistration: t('topology.removeRegistration'),
+    removeProjectConfirm: t('topology.removeProjectConfirm'),
+    noProjects: t('topology.noProjects')
+  }
 }
 
 function formatSkillRelativePath(skill: SkillDetail, root?: SkillRoot | null): string {
@@ -1502,12 +1932,6 @@ function sameSet(left: Set<string>, right: Set<string>): boolean {
     if (!right.has(item)) return false
   }
   return true
-}
-
-function findLobeAgentName(root: SkillRoot): string | null {
-  if (root.shared && root.appNames.length !== 1) return null
-
-  return findLobeAgentNameFromCandidates([root.appIds, root.appNames, root.label])
 }
 
 function findLobeAgentNameFromCandidates(
@@ -1537,22 +1961,6 @@ function normalizeAgentText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
-function formatAccess(
-  skill: SkillDetail,
-  t: (key: TranslationKey, replacements?: Parameters<typeof translate>[2]) => string
-): string {
-  if (skill.system) return t('access.systemReadonly')
-  if (skill.readonly) return t('access.readonly')
-  return t('access.editable')
-}
-
-interface SkillGroup {
-  id: string
-  label: string
-  root?: SkillRoot
-  skills: SkillSummary[]
-}
-
 function matchesRootFilter(
   skill: SkillSummary,
   root: SkillRoot | undefined,
@@ -1576,53 +1984,13 @@ function buildRootFilterItems(
     { id: 'category:shared', label: t('skills.root.shared') },
     { id: 'category:application', label: t('skills.root.application') },
     { id: 'category:custom', label: t('skills.root.custom') },
-    ...existingRoots.map((root) => ({ id: root.id, label: root.label }))
+    ...existingRoots.map((root) => ({ id: root.id, label: formatRootDisplayLabel(root, root.label, t) }))
   ]
 }
 
-function groupSkillsByRoot(skills: SkillSummary[], roots: SkillRoot[]): SkillGroup[] {
-  const rootById = new Map(roots.map((root) => [root.id, root]))
-  const groups = new Map<string, SkillGroup>()
-
-  for (const skill of skills) {
-    const root = rootById.get(skill.rootId)
-    const id = root?.id || skill.rootId
-    const group = groups.get(id) || {
-      id,
-      label: root?.label || skill.rootLabel,
-      root,
-      skills: []
-    }
-    group.skills.push(skill)
-    groups.set(id, group)
-  }
-
-  return [...groups.values()].sort(compareSkillGroups)
-}
-
-function compareSkillGroups(left: SkillGroup, right: SkillGroup): number {
-  const categoryDiff =
-    rootCategoryOrder(left.root?.category) - rootCategoryOrder(right.root?.category)
-  if (categoryDiff !== 0) return categoryDiff
-  return left.label.localeCompare(right.label)
-}
-
-function rootCategoryOrder(category?: SkillRootCategory): number {
-  if (category === 'codex') return 0
-  if (category === 'shared') return 1
-  if (category === 'application') return 2
-  if (category === 'custom') return 3
-  return 4
-}
-
-function formatGroupSubtitle(
-  root: SkillRoot | undefined,
-  t: (key: TranslationKey, replacements?: Parameters<typeof translate>[2]) => string
-): string {
-  if (!root) return t('root.unregistered')
-  if (root.shared && root.appNames.length > 0) return root.appNames.join(', ')
-  if (root.appNames.length > 0) return root.path
-  return formatRootKind(root, t)
+function formatRootDisplayLabel(root: SkillRoot | null | undefined, fallback: string, t: ReturnType<typeof useTranslator>): string {
+  if (root?.category === 'shared' || root?.shared) return t('root.shared')
+  return fallback
 }
 
 function formatRootKind(

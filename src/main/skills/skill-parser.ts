@@ -1,4 +1,5 @@
 import type { SkillIssue } from './skill-types'
+import { parseDocument } from 'yaml'
 
 export interface ParsedSkill {
   frontmatter: Record<string, string>
@@ -39,25 +40,30 @@ export function parseSkillMarkdown(content: string): ParsedSkill {
   const body = normalized.slice(end + 5).trimStart()
   const frontmatter: Record<string, string> = {}
 
-  for (const line of frontmatterText.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-
-    const separator = trimmed.indexOf(':')
-    if (separator === -1) {
-      issues.push({ severity: 'warning', message: `无法识别 frontmatter 行：${trimmed}` })
-      continue
+  const document = parseDocument(frontmatterText, { prettyErrors: true, uniqueKeys: true })
+  if (document.errors.length) {
+    return {
+      frontmatter,
+      body,
+      issues: document.errors.map((error) => ({
+        severity: 'error' as const,
+        message: `YAML frontmatter 无效：${error.message}`
+      }))
     }
+  }
 
-    const key = trimmed.slice(0, separator).trim()
-    const value = trimmed
-      .slice(separator + 1)
-      .trim()
-      .replace(/^['"]|['"]$/g, '')
-
-    if (key) {
-      frontmatter[key] = value
+  const parsed = document.toJS()
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      frontmatter,
+      body,
+      issues: [{ severity: 'error', message: 'YAML frontmatter 必须是键值对象。' }]
     }
+  }
+
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (value === null || value === undefined) continue
+    frontmatter[key] = typeof value === 'string' ? value : JSON.stringify(value)
   }
 
   if (!frontmatter.name) {
