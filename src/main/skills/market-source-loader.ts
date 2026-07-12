@@ -85,18 +85,22 @@ export class MarketSourceLoader {
   private redSkillDefaultRequests = new Map<string, Promise<CatalogSkillRecord[]>>()
   private clawHubCursors = new Map<string, Map<number, string | undefined>>()
   private catalogDiskCache: MarketCatalogCache
+  private lobeHubRunnerPath: string
 
   constructor(private cacheRoot: string) {
     this.catalogDiskCache = new MarketCatalogCache(join(cacheRoot, 'catalogs'))
+    this.lobeHubRunnerPath = join(cacheRoot, 'lobehub-cli-runner.mjs')
+    mkdirSync(cacheRoot, { recursive: true })
+    writeFileSync(this.lobeHubRunnerPath, "delete process.versions.electron\nawait import(process.env.LOBEHUB_MARKET_CLI_ENTRY)\n", { mode: 0o600 })
   }
 
   async getLobeHubStatus(): Promise<{ ready: boolean; profile?: Record<string, unknown>; error?: string }> {
     try {
-      const output = await runLobeHubCli(['profile', 'get', '--output', 'json'])
+      const output = await runLobeHubCli(this.lobeHubRunnerPath, ['profile', 'get', '--output', 'json'])
       return { ready: true, profile: parseJsonOutput(output) }
     } catch (error) {
       const message = normalizeLoaderError(error)
-      if (/no credentials|register/i.test(message)) return { ready: false }
+      if (/no credentials|register|尚未设置|市场身份/i.test(message)) return { ready: false }
       return { ready: false, error: message }
     }
   }
@@ -108,7 +112,7 @@ export class MarketSourceLoader {
     if (name.length < 2 || name.length > 80) throw new Error('LobeHub 名称需为 2–80 个字符。')
     if (description.length < 10 || description.length > 500) throw new Error('LobeHub 描述需为 10–500 个字符。')
     if (!/^[a-z][a-z0-9-]{1,30}$/.test(source)) throw new Error('LobeHub 来源标识无效。')
-    await runLobeHubCli(['register', '--name', name, '--description', description, '--source', source])
+    await runLobeHubCli(this.lobeHubRunnerPath, ['register', '--name', name, '--description', description, '--source', source])
     return this.getLobeHubStatus()
   }
 
@@ -174,7 +178,7 @@ export class MarketSourceLoader {
     const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)))
     if (kind === 'skillhub') return listSkillHubCatalog(source, safePage, safePageSize, query)
     if (kind === 'clawhub') return this.listClawHubPage(source, safePage, safePageSize, query)
-    if (kind === 'lobehub') return listLobeHubCatalog(safePage, safePageSize, query)
+    if (kind === 'lobehub') return listLobeHubCatalog(this.lobeHubRunnerPath, safePage, safePageSize, query)
     if (kind === 'redskill') {
       if (query.trim()) return listRedSkillCatalog(source, safePage, safePageSize, query)
       const sourceKey = source.trim().toLowerCase()
@@ -349,7 +353,7 @@ export class MarketSourceLoader {
       rmSync(staging, { recursive: true, force: true })
       mkdirSync(staging, { recursive: true })
       try {
-        await runLobeHubCli(['skills', 'install', identifier, '--dir', staging])
+        await runLobeHubCli(this.lobeHubRunnerPath, ['skills', 'install', identifier, '--dir', staging])
         const installed = existsSync(join(staging, identifier, 'SKILL.md'))
           ? join(staging, identifier)
           : findSkillDirectories(staging)[0]
@@ -677,10 +681,10 @@ function mapClawHubItem(item: unknown): CatalogSkillRecord[] {
   }]
 }
 
-async function listLobeHubCatalog(page: number, pageSize: number, query: string): Promise<CatalogPage> {
+async function listLobeHubCatalog(runnerPath: string, page: number, pageSize: number, query: string): Promise<CatalogPage> {
   const args = ['skills', 'search', '--page', String(page), '--page-size', String(pageSize), '--locale', 'zh-CN', '--output', 'json']
   if (query.trim()) args.push('--q', query.trim())
-  const raw = parseJsonOutput(await runLobeHubCli(args))
+  const raw = parseJsonOutput(await runLobeHubCli(runnerPath, args))
   const items = Array.isArray(raw.items) ? raw.items : []
   const records = items.flatMap((item) => {
     if (!item || typeof item !== 'object') return []
@@ -710,10 +714,10 @@ async function listLobeHubCatalog(page: number, pageSize: number, query: string)
   }
 }
 
-function runLobeHubCli(args: string[]): Promise<string> {
+function runLobeHubCli(runnerPath: string, args: string[]): Promise<string> {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(process.execPath, [lobeHubCliPath, ...args], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    const child = spawn(process.execPath, [runnerPath, ...args], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', LOBEHUB_MARKET_CLI_ENTRY: lobeHubCliPath },
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let stdout = ''
@@ -747,7 +751,12 @@ function runLobeHubCli(args: string[]): Promise<string> {
     child.on('close', (code) => {
       finish(() => {
         if (code === 0) resolvePromise(stdout.trim())
-        else reject(new Error((stderr || stdout).trim() || `LobeHub CLI 退出码：${code}`))
+        else {
+          const detail = (stderr || stdout).trim()
+          reject(new Error(/no credentials found/i.test(detail)
+            ? 'LobeHub 尚未设置，请先创建本机市场身份。'
+            : detail || `LobeHub CLI 退出码：${code}`))
+        }
       })
     })
   })

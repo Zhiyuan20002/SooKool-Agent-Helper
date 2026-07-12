@@ -801,7 +801,7 @@ export function SkillMarket(): React.JSX.Element {
           <span>{selectedSource ? localizedSourceDescription(selectedSource.id, selectedSource.description, language) : copy.publicDescription}</span>
         </div>
         <span>{paginationMode === 'cursor'
-          ? (language === 'zh-CN' ? `本批 ${visibleSkills.length} 个 Skill` : `${visibleSkills.length} Skills in this batch`)
+          ? (language === 'zh-CN' ? `本页 ${visibleSkills.length} 个 Skill` : `${visibleSkills.length} Skills on this page`)
           : marketText(copy.count, { count: effectiveTotal })}</span>
       </div>}
 
@@ -826,7 +826,7 @@ export function SkillMarket(): React.JSX.Element {
       </main>}
 
       {!loading && paginationMode === 'cursor' && remoteCatalog && (
-        <MarketCursorPagination page={page} hasMore={hasMore} copy={copy} onChange={(next) => void changePage(next)} />
+        <MarketCursorPagination page={page} hasMore={hasMore} copy={copy} language={language} onChange={(next) => void changePage(next)} />
       )}
       {!loading && paginationMode === 'page' && pageCount > 1 && (
         <MarketPagination page={page} total={effectiveTotal} pageSize={pageSize} copy={copy} onChange={(next) => void changePage(next)} />
@@ -887,10 +887,10 @@ function MarketPagination({ page, total, pageSize, copy, onChange }: { page: num
   )
 }
 
-function MarketCursorPagination({ page, hasMore, copy, onChange }: { page: number; hasMore: boolean; copy: ReturnType<typeof marketCopy>; onChange: (page: number) => void }): React.JSX.Element {
+function MarketCursorPagination({ page, hasMore, copy, language, onChange }: { page: number; hasMore: boolean; copy: ReturnType<typeof marketCopy>; language: string; onChange: (page: number) => void }): React.JSX.Element {
   return (
     <Pagination className="market-pagination" size="sm" aria-label={copy.pagination}>
-      <Pagination.Summary>{`第 ${page} 批`}</Pagination.Summary>
+      <Pagination.Summary>{language === 'zh-CN' ? `第 ${page} 页` : `Page ${page}`}</Pagination.Summary>
       <Pagination.Content>
         <Pagination.Item><Pagination.Previous isDisabled={page === 1} onPress={() => onChange(page - 1)}><Pagination.PreviousIcon />{copy.previous}</Pagination.Previous></Pagination.Item>
         <Pagination.Item><Pagination.Next isDisabled={!hasMore} onPress={() => onChange(page + 1)}>{copy.next}<Pagination.NextIcon /></Pagination.Next></Pagination.Item>
