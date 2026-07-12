@@ -186,7 +186,7 @@ export function SkillMarket(): React.JSX.Element {
   const previewRequestRef = useRef(0)
   const marketSchedulerRef = useRef(createMarketTaskScheduler(3))
   const preloadTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const catalogMemoryRef = useRef(createBoundedMarketCache<string, { skills: MarketSkill[]; cachedAt: number; total?: number }>(8))
+  const catalogMemoryRef = useRef(createBoundedMarketCache<string, { skills: MarketSkill[]; cachedAt: number; total?: number; pageSize?: number }>(8))
   const preloadRequestsRef = useRef(new Map<string, Promise<void>>())
   const [sources, setSources] = useState<MarketSource[]>(fallbackSources)
   const [selectedSourceId, setSelectedSourceId] = useState('builtin-anthropic-skills')
@@ -234,12 +234,12 @@ export function SkillMarket(): React.JSX.Element {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [sources])
+  }, [sources, pageSize])
 
   useEffect(() => {
     if (!sources.length || selectedSourceId === 'search' || showSources) return
     void loadCatalog(selectedSourceId)
-  }, [selectedSourceId, showSources])
+  }, [selectedSourceId, showSources, pageSize])
 
   useEffect(() => {
     const gridArea = listTopRef.current
@@ -269,7 +269,11 @@ export function SkillMarket(): React.JSX.Element {
   async function loadCatalog(sourceId = selectedSourceId, refresh = false): Promise<void> {
     const requestId = ++catalogRequestRef.current
     if (refresh) catalogMemoryRef.current.delete(sourceId)
-    const local = refresh ? undefined : catalogMemoryRef.current.get(sourceId)
+    const source = sources.find((item) => item.id === sourceId)
+    if (!source) return
+    const isRemote = remoteMarketKinds.has(source.kind)
+    const cachedLocal = refresh ? undefined : catalogMemoryRef.current.get(sourceId)
+    const local = isRemote && cachedLocal?.pageSize !== pageSize ? undefined : cachedLocal
     const localIsFresh = Boolean(local && Date.now() - local.cachedAt < rendererCatalogMaxAgeMs)
     const canKeepCurrent = (refresh && selectedSourceId === sourceId && skills.length > 0) || Boolean(local)
     setLoading(!canKeepCurrent)
@@ -281,10 +285,7 @@ export function SkillMarket(): React.JSX.Element {
     shellRef.current?.scrollTo({ top: 0, behavior: 'instant' })
     let hasCachedContent = canKeepCurrent
     try {
-      const source = sources.find((item) => item.id === sourceId)
-      if (!source) return
-      const isRemote = remoteMarketKinds.has(source.kind)
-      if (local && !isRemote) {
+      if (local) {
         setSkills(local.skills)
         setCatalogTotal(local.total ?? local.skills.length)
         setCatalogBatchPage(1)
@@ -320,7 +321,7 @@ export function SkillMarket(): React.JSX.Element {
       } else {
         const nextSkills = dedupeSkills(result.skills)
         const total = result.total ?? nextSkills.length
-        catalogMemoryRef.current.set(sourceId, { skills: nextSkills, cachedAt: Date.now(), total })
+        catalogMemoryRef.current.set(sourceId, { skills: nextSkills, cachedAt: Date.now(), total, pageSize: result.pageSize })
         setSkills(nextSkills)
         setCatalogTotal(total)
         setCatalogBatchPage(1)
@@ -557,7 +558,8 @@ export function SkillMarket(): React.JSX.Element {
     setSelectedSourceId(source.id)
     setActiveCategory('all')
     setError(null)
-    const local = remoteMarketKinds.has(source.kind) ? undefined : catalogMemoryRef.current.get(source.id)
+    const cachedLocal = catalogMemoryRef.current.get(source.id)
+    const local = remoteMarketKinds.has(source.kind) && cachedLocal?.pageSize !== pageSize ? undefined : cachedLocal
     setSkills(local?.skills || [])
     setCatalogTotal(local?.total ?? local?.skills.length ?? 0)
     setCatalogBatchPage(1)
@@ -567,12 +569,12 @@ export function SkillMarket(): React.JSX.Element {
 
   async function preloadCatalog(source: MarketSource): Promise<void> {
     const local = catalogMemoryRef.current.get(source.id)
-    if (local && Date.now() - local.cachedAt < rendererCatalogMaxAgeMs) return
+    const isRemote = remoteMarketKinds.has(source.kind)
+    if (local && (!isRemote || local.pageSize === pageSize) && Date.now() - local.cachedAt < rendererCatalogMaxAgeMs) return
     const running = preloadRequestsRef.current.get(source.id)
     if (running) return running
     const request = marketSchedulerRef.current.schedule(async () => {
       try {
-        const isRemote = remoteMarketKinds.has(source.kind)
         const cached = await window.aiHelper.invoke<MarketSkillResult>('market:listCachedSkills', { sourceId: source.id })
         const cachedSkills = dedupeSkills(cached.skills)
         if (!isRemote && cached.cacheHit) {
@@ -583,13 +585,14 @@ export function SkillMarket(): React.JSX.Element {
           sourceId: source.id,
           refresh: Boolean(cached.isStale),
           page: 1,
-          pageSize: isRemote ? remoteCatalogBatchSize : undefined
+          pageSize: isRemote ? pageSize : undefined
         })
         if (!result.error) {
           catalogMemoryRef.current.set(source.id, {
             skills: dedupeSkills(result.skills),
             cachedAt: Date.now(),
-            total: result.total
+            total: result.total,
+            pageSize: result.pageSize
           })
         }
       } catch {
