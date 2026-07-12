@@ -3,7 +3,7 @@
   color-scheme: light;
   --window: #f3f2f0;
   --content: #ffffff;
-  --sidebar: rgba(246, 245, 243, 0.46);
+  --sidebar: rgba(246, 245, 243, 0.62);
   --panel: #f7f7f8;
   --panel-strong: #efeff1;
   --control: rgba(255, 255, 255, 0.82);
@@ -55,12 +55,6 @@
   --red-weak: rgba(255, 59, 48, 0.1);
   --code: #fbfbfd;
   --white: #ffffff;
-  --radius-control: 8px;
-  --radius-panel: 12px;
-  --radius-overlay: 16px;
-  --motion-instant: 110ms;
-  --motion-standard: 180ms;
-  --ease-out-snappy: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -68,7 +62,7 @@
     color-scheme: dark;
     --window: #111113;
     --content: #18181b;
-    --sidebar: rgba(28, 28, 31, 0.56);
+    --sidebar: rgba(28, 28, 31, 0.72);
     --panel: #202024;
     --panel-strong: #2a2a2e;
     --control: rgba(255, 255, 255, 0.08);
@@ -127,7 +121,7 @@
   color-scheme: dark;
   --window: #111113;
   --content: #18181b;
-  --sidebar: rgba(28, 28, 31, 0.56);
+  --sidebar: rgba(28, 28, 31, 0.72);
   --panel: #202024;
   --panel-strong: #2a2a2e;
   --control: rgba(255, 255, 255, 0.08);

@@ -27,12 +27,11 @@ body,
 body {
   overflow: hidden;
   color: var(--text);
-  background: transparent;
+  background: var(--window);
   font-family:
     -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', Arial,
     sans-serif;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -44,15 +43,6 @@ select {
 
 .button:active,
 .button[data-pressed='true'] {
-  transform: scale(0.98);
-  transition:
-    transform var(--motion-instant) var(--ease-out-snappy),
-    background-color var(--motion-instant) var(--ease-out-snappy),
-    border-color var(--motion-instant) var(--ease-out-snappy);
-}
-
-.button[aria-disabled='true'],
-.button:disabled {
   transform: none;
 }
 
@@ -71,7 +61,7 @@ select {
 .app-shell {
   height: 100%;
   display: flex;
-  background: transparent;
+  background: var(--content);
 }
 
 .sidebar {
@@ -83,8 +73,12 @@ select {
   border-right: 0.5px solid var(--hairline);
   background: var(--sidebar);
   box-shadow: inset -1px 0 0 var(--edge-light);
-  backdrop-filter: blur(20px) saturate(1.65);
-  -webkit-backdrop-filter: blur(20px) saturate(1.65);
+  backdrop-filter: blur(46px) saturate(1.8);
+  -webkit-backdrop-filter: blur(46px) saturate(1.8);
+  transition:
+    width 180ms ease,
+    flex-basis 180ms ease,
+    padding 180ms ease;
 }
 
 .sidebar-collapsed .sidebar {
@@ -189,18 +183,9 @@ select {
   margin-bottom: 10px;
 }
 
-.brand-copy,
-.nav-label {
-  opacity: 1;
-  transition: opacity var(--motion-instant) var(--ease-out-snappy);
-}
-
 .sidebar-collapsed .brand-copy,
 .sidebar-collapsed .nav-label {
-  width: 0;
-  opacity: 0;
-  overflow: hidden;
-  pointer-events: none;
+  display: none;
 }
 
 .sidebar-collapsed .nav {
@@ -234,14 +219,6 @@ select {
   justify-content: stretch;
   gap: 10px;
   text-align: left;
-  transition:
-    transform var(--motion-instant) var(--ease-out-snappy),
-    background-color var(--motion-instant) var(--ease-out-snappy),
-    color var(--motion-instant) var(--ease-out-snappy);
-}
-
-.nav-button[aria-current='page'] {
-  color: var(--text);
 }
 
 .sidebar-collapsed .nav-button {
@@ -465,12 +442,7 @@ select {
 
 .library-overview {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0;
-  min-height: 38px;
-  padding: 4px;
-  border: 0.5px solid var(--hairline);
-  border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--control) 38%, transparent);
+  gap: 8px;
 }
 
 .library-filter-grid {
@@ -538,29 +510,24 @@ select {
 }
 
 .library-overview .metric-card {
-  min-height: 30px;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
+  min-height: 68px;
+  border: 0.5px solid var(--hairline);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--control) 46%, transparent);
   box-shadow: none;
   overflow: hidden;
 }
 
-.library-overview .metric-card + .metric-card {
-  border-left: 0.5px solid var(--hairline);
-  border-radius: 0;
-}
-
 .library-overview .metric-card-content {
   height: 100%;
-  padding: 4px 9px;
+  padding: 12px 14px;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  grid-template-rows: 1fr;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-rows: auto auto;
   align-content: center;
   align-items: center;
-  column-gap: 7px;
-  row-gap: 0;
+  column-gap: 9px;
+  row-gap: 3px;
 }
 
 .library-overview .metric-label-row {
@@ -569,19 +536,19 @@ select {
 
 .library-overview .metric-card .metric-icon {
   grid-column: 1;
-  grid-row: 1;
-  width: 18px;
-  height: 18px;
+  grid-row: 1 / span 2;
+  width: 28px;
+  height: 28px;
   color: var(--muted-2);
   opacity: 0.72;
 }
 
 .library-overview .metric-card strong {
-  grid-column: 3;
-  grid-row: 1;
+  grid-column: 2;
+  grid-row: 2;
   color: color-mix(in srgb, var(--text) 88%, var(--muted));
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 18px;
+  font-weight: 620;
   line-height: 1;
 }
 
@@ -595,8 +562,8 @@ select {
 }
 
 .library-overview .metric-card .metric-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 24px;
+  height: 24px;
 }
 
 .settings-grid {
@@ -610,7 +577,7 @@ select {
 }
 
 .settings-grid .metric-card {
-  min-height: 58px;
+  min-height: 68px;
   overflow: hidden;
   border: 0.5px solid var(--hairline);
   border-radius: 12px;
@@ -620,9 +587,9 @@ select {
 
 .settings-grid .metric-card-content {
   height: 100%;
-  padding: 10px 12px;
+  padding: 12px 14px;
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   grid-template-rows: auto auto;
   align-content: center;
   align-items: center;
@@ -655,15 +622,15 @@ select {
 .settings-grid .metric-card .metric-icon {
   grid-column: 1;
   grid-row: 1 / span 2;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   color: var(--muted-2);
   opacity: 0.72;
 }
 
 .settings-grid .metric-card .metric-icon svg {
-  width: 19px;
-  height: 19px;
+  width: 24px;
+  height: 24px;
 }
 
 .search-field {
@@ -757,18 +724,12 @@ select {
   color: var(--orange);
 }
 
-.skill-group-heading:focus-visible {
+.skill-group-heading:hover {
   background: var(--control-hover);
 }
 
 .skill-group-heading:active {
   background: var(--control-pressed);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .skill-group-heading:hover {
-    background: var(--control-hover);
-  }
 }
 
 .skill-group-icon {
@@ -907,9 +868,6 @@ select {
   justify-content: flex-start;
   overflow: hidden;
   white-space: normal;
-  transition:
-    transform var(--motion-instant) var(--ease-out-snappy),
-    background-color var(--motion-instant) var(--ease-out-snappy);
 }
 
 .row-main {
@@ -1313,6 +1271,7 @@ select {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   background: var(--content);
+  transition: grid-template-columns 180ms ease;
 }
 
 .skill-file-browser.file-sidebar-collapsed {
@@ -1330,8 +1289,8 @@ select {
   background: var(--panel);
   overflow: hidden;
   transition:
-    opacity var(--motion-instant) var(--ease-out-snappy),
-    visibility var(--motion-instant) linear;
+    opacity 140ms ease,
+    visibility 140ms ease;
 }
 
 .file-sidebar-collapsed .file-sidebar {
@@ -1844,21 +1803,16 @@ select {
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition:
-    color var(--motion-instant) var(--ease-out-snappy),
-    background-color var(--motion-instant) var(--ease-out-snappy);
+}
+
+.settings-nav-item:hover {
+  color: var(--text);
+  background: var(--control-hover);
 }
 
 .settings-nav-item.active {
   color: var(--selected-text);
   background: var(--selected);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .settings-nav-item:hover {
-    color: var(--text);
-    background: var(--control-hover);
-  }
 }
 
 .settings-nav-item span {
@@ -1873,9 +1827,9 @@ select {
   min-height: 0;
   height: 100%;
   padding: 18px;
-  border: 0;
+  border: 0.5px solid var(--hairline);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--panel) 42%, var(--content));
+  background: var(--content);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1935,7 +1889,7 @@ select {
 }
 
 .settings-control-row + .settings-control-row {
-  border-top: 0.5px solid color-mix(in srgb, var(--hairline) 70%, transparent);
+  border-top: 0.5px solid var(--hairline);
 }
 
 .settings-control {
@@ -2478,7 +2432,14 @@ select {
   overflow: auto;
   padding: 34px clamp(26px, 4vw, 54px) 54px;
   color: var(--market-ink);
-  background: var(--market-canvas);
+  background:
+    radial-gradient(
+      ellipse 72% 36% at 0% 0%,
+      color-mix(in srgb, var(--market-accent) 16%, var(--market-canvas)) 0%,
+      color-mix(in srgb, var(--market-accent) 5%, var(--market-canvas)) 44%,
+      transparent 76%
+    ),
+    var(--market-canvas);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
 }
 
@@ -2593,10 +2554,7 @@ select {
   gap: 10px;
   color: var(--market-muted);
   background: var(--market-surface);
-  box-shadow: none;
-  transition:
-    border-color var(--motion-instant) var(--ease-out-snappy),
-    background-color var(--motion-instant) var(--ease-out-snappy);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.025);
 }
 
 .marketplace-search:focus-within {
@@ -2686,6 +2644,12 @@ select {
   min-width: 0;
   line-height: 1.25;
   text-align: left;
+}
+
+.market-source-rail button:hover,
+.market-categories button:hover {
+  color: var(--market-ink);
+  background: color-mix(in srgb, var(--market-muted) 9%, transparent);
 }
 
 .market-source-rail button.active {
@@ -2821,11 +2785,9 @@ select {
   overflow: hidden;
   color: var(--market-ink);
   background: var(--market-surface);
-  box-shadow: none;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.025);
   cursor: pointer;
-  transition:
-    border-color var(--motion-standard) var(--ease-out-snappy),
-    background-color var(--motion-standard) var(--ease-out-snappy);
+  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
 }
 
 .market-card::after {
@@ -2835,36 +2797,22 @@ select {
   top: 0;
   bottom: 0;
   left: calc(var(--market-cover-width) - 1px);
-  width: 88px;
+  width: 128px;
   pointer-events: none;
   opacity: 0;
   background: linear-gradient(90deg, var(--market-card-tone) 0%, transparent 100%);
   transition: opacity 180ms ease;
 }
 
+.market-card:hover,
 .market-card:focus-visible {
   border-color: var(--market-card-accent);
+  transform: translateY(-1px);
   outline: 0;
 }
 
+.market-card:hover::after,
 .market-card:focus-visible::after { opacity: 0.72; }
-
-@media (hover: hover) and (pointer: fine) {
-  .market-source-rail button:hover,
-  .market-categories button:hover {
-    color: var(--market-ink);
-    background: color-mix(in srgb, var(--market-muted) 9%, transparent);
-  }
-
-  .market-card:hover {
-    border-color: color-mix(in srgb, var(--market-card-accent) 58%, transparent);
-    background: color-mix(in srgb, var(--market-card-tone) 7%, var(--market-surface));
-  }
-
-  .market-card:hover::after {
-    opacity: 0.42;
-  }
-}
 
 .market-card-cover {
   min-height: 100%;
@@ -2949,8 +2897,9 @@ select {
 .market-card-description {
   margin: 11px 0 10px;
   color: color-mix(in srgb, var(--market-ink) 78%, var(--market-muted));
+  font-family: "SF Mono", "Cascadia Code", ui-monospace, monospace;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.48;
   display: -webkit-box;
   overflow: hidden;
   -webkit-line-clamp: 2;
@@ -3142,6 +3091,28 @@ select {
 .market-detail-install .copy-option small { color: var(--muted); }
 .market-detail-install .install-panel { max-width: 1440px; margin-inline: auto; }
 
+.market-preview-container {
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
+.market-preview-drawer {
+  width: min(680px, calc(100vw - 310px));
+  height: 100%;
+  border-left: 0.5px solid color-mix(in srgb, var(--market-muted) 22%, transparent);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  color: var(--market-ink);
+  background: var(--content);
+  animation: market-slide-in 190ms cubic-bezier(.2,.8,.2,1);
+}
+
 .preview-drawer-header {
   min-width: 0;
   justify-content: flex-start;
@@ -3182,9 +3153,6 @@ select {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  transition:
-    color var(--motion-instant) var(--ease-out-snappy),
-    border-color var(--motion-instant) var(--ease-out-snappy);
 }
 
 .preview-tabs button.active { color: var(--market-ink); border-bottom-color: var(--market-accent); font-weight: 650; }
@@ -3333,8 +3301,12 @@ select {
 .source-add-form label { color: var(--market-muted); font-size: 9px; }
 .source-add-form input { min-width: 0; height: 36px; padding: 0 10px; border: 0.5px solid color-mix(in srgb, var(--market-muted) 22%, transparent); border-radius: 9px; outline: 0; color: var(--market-ink); background: color-mix(in srgb, var(--market-muted) 4%, transparent); font: inherit; font-size: 11px; }
 
+@keyframes market-fade-in { from { opacity: 0; } }
+@keyframes market-slide-in { from { transform: translateX(28px); opacity: .5; } }
+
 @media (max-width: 1120px) {
   .market-card { min-height: 176px; }
+  .market-preview-drawer { width: min(640px, calc(100vw - 100px)); }
 }
 
 @media (max-width: 760px) {
@@ -3344,6 +3316,7 @@ select {
   .marketplace-controls { flex-wrap: wrap; }
   .market-category-bar { align-items: flex-start; }
   .market-card { --market-cover-width: 88px; grid-template-columns: 88px minmax(0, 1fr); }
+  .market-preview-drawer { width: 100%; }
   .market-detail-page { padding: 24px 18px 20px; }
   .market-detail-page .detail-title-row { grid-template-columns: 1fr; align-items: flex-start; }
   .market-detail-install { margin: 0 -18px -20px; padding: 16px 18px 18px; }
@@ -3357,6 +3330,7 @@ select {
 
 @media (prefers-reduced-motion: reduce) {
   .market-overlay,
+  .market-preview-drawer,
   .market-card,
   .market-card::after { animation: none; transition: none; }
 }
@@ -3446,49 +3420,6 @@ select {
 @keyframes spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-/* Platform comfort preferences stay global so every HeroUI surface inherits them. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-  }
-
-  .button:active,
-  .button[data-pressed='true'] {
-    transform: none;
-  }
-
-  .brand-copy,
-  .nav-label,
-  .nav-button,
-  .file-sidebar,
-  .preview-tabs button {
-    transition: none;
-  }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .sidebar {
-    background: var(--window);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
-@media (prefers-contrast: more) {
-  :root,
-  [data-theme='light'],
-  [data-theme='dark'] {
-    --hairline: color-mix(in srgb, currentColor 24%, transparent);
-    --hairline-strong: color-mix(in srgb, currentColor 38%, transparent);
-  }
-
-  .sidebar {
-    border-right-color: var(--hairline-strong);
   }
 }
 

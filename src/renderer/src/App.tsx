@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Spinner, Tooltip } from '@heroui/react'
+import { Button, Spinner } from '@heroui/react'
 import { BookText, PanelLeftClose, PanelLeftOpen, Settings, Settings2, Store } from 'lucide-react'
 import { SkillLibrary } from '@/components/SkillLibrary'
 import { resolveAppLanguage, translate } from '@/i18n'
@@ -83,12 +83,11 @@ export function App(): React.JSX.Element {
           {navItems.map((item) => {
             const Icon = item.icon
             const label = t(item.labelKey)
-            const button = (
+            return (
               <Button
                 key={item.id}
                 className="nav-button"
                 aria-label={label}
-                aria-current={currentView === item.id ? 'page' : undefined}
                 fullWidth
                 variant={currentView === item.id ? 'tertiary' : 'ghost'}
                 onPress={() => setCurrentView(item.id)}
@@ -98,34 +97,12 @@ export function App(): React.JSX.Element {
                 {item.id === 'local' && <span className="nav-count">{skills.length}</span>}
               </Button>
             )
-            if (!sidebarCollapsed) return button
-            return (
-              <Tooltip key={item.id} delay={300} closeDelay={80}>
-                {button}
-                <Tooltip.Content showArrow placement="right">
-                  <Tooltip.Arrow />
-                  <span>{label}</span>
-                </Tooltip.Content>
-              </Tooltip>
-            )
           })}
         </nav>
         <div className="sidebar-footer no-drag">
-          {(() => {
-            const label = t('nav.settings')
-            const button = (
-              <Button className="nav-button" aria-label={label} aria-current={currentView === 'settings' ? 'page' : undefined} fullWidth variant={currentView === 'settings' ? 'tertiary' : 'ghost'} onPress={() => setCurrentView('settings')}>
-                <Settings size={20} /><span className="nav-label">{label}</span>
-              </Button>
-            )
-            if (!sidebarCollapsed) return button
-            return (
-              <Tooltip delay={300} closeDelay={80}>
-                {button}
-                <Tooltip.Content showArrow placement="right"><Tooltip.Arrow /><span>{label}</span></Tooltip.Content>
-              </Tooltip>
-            )
-          })()}
+          <Button className="nav-button" aria-label={t('nav.settings')} fullWidth variant={currentView === 'settings' ? 'tertiary' : 'ghost'} onPress={() => setCurrentView('settings')}>
+            <Settings size={20} /><span className="nav-label">{t('nav.settings')}</span>
+          </Button>
         </div>
       </aside>
 

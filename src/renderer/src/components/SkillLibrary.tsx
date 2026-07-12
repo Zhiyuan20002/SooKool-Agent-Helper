@@ -1081,7 +1081,7 @@ function SkillListItem({
   const t = useTranslator()
 
   return (
-    <Button className="skill-row" aria-current={active ? 'true' : undefined} variant={active ? 'secondary' : 'ghost'} onPress={onPress}>
+    <Button className="skill-row" variant={active ? 'secondary' : 'ghost'} onPress={onPress}>
       <div className="row-main">
         <div>
           <strong>{skill.name}</strong>
@@ -1224,7 +1224,6 @@ function SettingsView({ scope }: { scope: 'general' | 'skills' }): React.JSX.Ele
                 key={section.id}
                 type="button"
                 className={`settings-nav-item${activeSection === section.id ? ' active' : ''}`}
-                aria-current={activeSection === section.id ? 'page' : undefined}
                 onClick={() => setActiveSection(section.id)}
               >
                 <Icon size={17} />
