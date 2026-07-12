@@ -5,6 +5,7 @@ import {
   Anthropic,
   HermesAgent,
   HuggingFace,
+  LobeHub,
   ModelScope,
   Nvidia,
   OpenAI,
@@ -54,14 +55,15 @@ import type {
   MarketSkillPreview,
   MarketSkillResult,
   MarketSource,
-  MarketPalette
+  MarketPalette,
+  LobeHubStatus
 } from '@/types/ecosystem'
 
 type PreviewTab = 'overview' | 'content' | 'files'
 type SortMode = 'featured' | 'name' | 'source'
 const rendererCatalogMaxAgeMs = 15 * 60 * 1000
 const remoteCatalogBatchSize = 100
-const remoteMarketKinds = new Set(['skillhub', 'redskill', 'modelscope'])
+const remoteMarketKinds = new Set(['skillhub', 'redskill', 'modelscope', 'clawhub', 'lobehub'])
 
 const fallbackSources: MarketSource[] = [
   {
@@ -163,6 +165,26 @@ const fallbackSources: MarketSource[] = [
     palette: 'memphis',
     builtin: true,
     enabled: true
+  },
+  {
+    id: 'builtin-clawhub',
+    name: 'ClawHub',
+    source: 'https://clawhub.ai',
+    description: 'OpenClaw public skill registry with semantic search and versioned downloads.',
+    kind: 'clawhub',
+    palette: 'matisse',
+    builtin: true,
+    enabled: true
+  },
+  {
+    id: 'builtin-lobehub-skills',
+    name: 'LobeHub Skills',
+    source: 'https://lobehub.com/skills',
+    description: 'LobeHub Agent Skills marketplace powered by the official CLI.',
+    kind: 'lobehub',
+    palette: 'macaron',
+    builtin: true,
+    enabled: true
   }
 ]
 
@@ -186,7 +208,7 @@ export function SkillMarket(): React.JSX.Element {
   const previewRequestRef = useRef(0)
   const marketSchedulerRef = useRef(createMarketTaskScheduler(3))
   const preloadTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const catalogMemoryRef = useRef(createBoundedMarketCache<string, { skills: MarketSkill[]; cachedAt: number; total?: number; pageSize?: number }>(8))
+  const catalogMemoryRef = useRef(createBoundedMarketCache<string, { skills: MarketSkill[]; cachedAt: number; total?: number; pageSize?: number; paginationMode?: 'page' | 'cursor'; hasMore?: boolean }>(12))
   const preloadRequestsRef = useRef(new Map<string, Promise<void>>())
   const [sources, setSources] = useState<MarketSource[]>(fallbackSources)
   const [selectedSourceId, setSelectedSourceId] = useState('builtin-anthropic-skills')
@@ -208,6 +230,12 @@ export function SkillMarket(): React.JSX.Element {
   const pageSize = columnCount * 10
   const [catalogTotal, setCatalogTotal] = useState(0)
   const [catalogBatchPage, setCatalogBatchPage] = useState(1)
+  const [paginationMode, setPaginationMode] = useState<'page' | 'cursor'>('page')
+  const [hasMore, setHasMore] = useState(false)
+  const [showLobeSetup, setShowLobeSetup] = useState(false)
+  const [lobeName, setLobeName] = useState('SooKool Agent Helper')
+  const [lobeDescription, setLobeDescription] = useState('SooKool 桌面端中的 Agent Skills 市场客户端。')
+  const [lobeSetupBusy, setLobeSetupBusy] = useState(false)
 
   useEffect(() => {
     void initializeMarket()
@@ -221,7 +249,7 @@ export function SkillMarket(): React.JSX.Element {
     let cancelled = false
     const timer = setTimeout(() => {
       const apiSources = sources.filter((source) =>
-        source.enabled && ['skillhub', 'redskill', 'modelscope'].includes(source.kind)
+        source.enabled && remoteMarketKinds.has(source.kind) && source.kind !== 'lobehub'
       )
       void (async () => {
         for (const source of apiSources) {
@@ -289,6 +317,8 @@ export function SkillMarket(): React.JSX.Element {
         setSkills(local.skills)
         setCatalogTotal(local.total ?? local.skills.length)
         setCatalogBatchPage(1)
+        setPaginationMode(local.paginationMode || 'page')
+        setHasMore(Boolean(local.hasMore))
         setLoading(false)
         if (localIsFresh) return
         setRefreshing(true)
@@ -321,10 +351,12 @@ export function SkillMarket(): React.JSX.Element {
       } else {
         const nextSkills = dedupeSkills(result.skills)
         const total = result.total ?? nextSkills.length
-        catalogMemoryRef.current.set(sourceId, { skills: nextSkills, cachedAt: Date.now(), total, pageSize: result.pageSize })
+        catalogMemoryRef.current.set(sourceId, { skills: nextSkills, cachedAt: Date.now(), total, pageSize: result.pageSize, paginationMode: result.paginationMode, hasMore: result.hasMore })
         setSkills(nextSkills)
         setCatalogTotal(total)
         setCatalogBatchPage(1)
+        setPaginationMode(result.paginationMode || 'page')
+        setHasMore(Boolean(result.hasMore))
       }
     } catch (error) {
       if (requestId === catalogRequestRef.current) setError(formatError(error))
@@ -470,6 +502,25 @@ export function SkillMarket(): React.JSX.Element {
     }
   }
 
+  async function registerLobeHub(): Promise<void> {
+    setLobeSetupBusy(true)
+    setError(null)
+    try {
+      const status = await window.aiHelper.invoke<LobeHubStatus>('market:registerLobehub', {
+        name: lobeName,
+        description: lobeDescription,
+        source: 'sookool-agent-helper'
+      })
+      if (!status.ready) throw new Error(status.error || 'LobeHub 注册未完成。')
+      setShowLobeSetup(false)
+      await loadCatalog('builtin-lobehub-skills', true)
+    } catch (error) {
+      setError(formatError(error))
+    } finally {
+      setLobeSetupBusy(false)
+    }
+  }
+
   const categories = useMemo(
     () => ['all' as MarketCategoryKey, ...new Set(skills.map((skill) => marketCategoryKey(skill.category)))],
     [skills]
@@ -529,6 +580,8 @@ export function SkillMarket(): React.JSX.Element {
       setCatalogTotal(result.total ?? catalogTotal)
       setCatalogBatchPage(nextPage)
       setPage(nextPage)
+      setPaginationMode(result.paginationMode || paginationMode)
+      setHasMore(Boolean(result.hasMore))
     } catch (error) {
       if (requestId === catalogRequestRef.current) setError(formatError(error))
     } finally {
@@ -563,6 +616,8 @@ export function SkillMarket(): React.JSX.Element {
     setSkills(local?.skills || [])
     setCatalogTotal(local?.total ?? local?.skills.length ?? 0)
     setCatalogBatchPage(1)
+    setPaginationMode(local?.paginationMode || 'page')
+    setHasMore(Boolean(local?.hasMore))
     setLoading(!local)
     setRefreshing(false)
   }
@@ -592,7 +647,9 @@ export function SkillMarket(): React.JSX.Element {
             skills: dedupeSkills(result.skills),
             cachedAt: Date.now(),
             total: result.total,
-            pageSize: result.pageSize
+            pageSize: result.pageSize,
+            paginationMode: result.paginationMode,
+            hasMore: result.hasMore
           })
         }
       } catch {
@@ -731,6 +788,7 @@ export function SkillMarket(): React.JSX.Element {
         <div className={error ? 'market-message error' : 'market-message success'}>
           {error ? <AlertTriangle size={15} /> : <Check size={15} />}
           <span>{error || notice}</span>
+          {error && selectedSource?.kind === 'lobehub' && <Button size="sm" variant="secondary" onPress={() => setShowLobeSetup(true)}>设置 LobeHub</Button>}
           <button type="button" onClick={() => { setError(null); setNotice(null) }}><X size={14} /></button>
         </div>
       )}
@@ -742,7 +800,9 @@ export function SkillMarket(): React.JSX.Element {
           <strong>{selectedSource ? localizedSourceName(selectedSource.id, selectedSource.name, language) : copy.publicResults}</strong>
           <span>{selectedSource ? localizedSourceDescription(selectedSource.id, selectedSource.description, language) : copy.publicDescription}</span>
         </div>
-        <span>{marketText(copy.count, { count: effectiveTotal })}</span>
+        <span>{paginationMode === 'cursor'
+          ? (language === 'zh-CN' ? `本批 ${visibleSkills.length} 个 Skill` : `${visibleSkills.length} Skills in this batch`)
+          : marketText(copy.count, { count: effectiveTotal })}</span>
       </div>}
 
       {!loading && <main className="market-grid">
@@ -765,8 +825,26 @@ export function SkillMarket(): React.JSX.Element {
         )}
       </main>}
 
-      {!loading && pageCount > 1 && (
+      {!loading && paginationMode === 'cursor' && remoteCatalog && (
+        <MarketCursorPagination page={page} hasMore={hasMore} copy={copy} onChange={(next) => void changePage(next)} />
+      )}
+      {!loading && paginationMode === 'page' && pageCount > 1 && (
         <MarketPagination page={page} total={effectiveTotal} pageSize={pageSize} copy={copy} onChange={(next) => void changePage(next)} />
+      )}
+
+      {showLobeSetup && (
+        <div className="lobe-setup-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowLobeSetup(false) }}>
+          <section className="lobe-setup-panel" role="dialog" aria-modal="true" aria-labelledby="lobe-setup-title">
+            <div className="lobe-setup-heading">
+              <div><h2 id="lobe-setup-title">设置 LobeHub Skills</h2><p>创建本机市场身份后，官方 CLI 才能搜索和下载 Skill。</p></div>
+              <button type="button" aria-label="关闭" onClick={() => setShowLobeSetup(false)}><X size={16} /></button>
+            </div>
+            <label>显示名称<input value={lobeName} onChange={(event) => setLobeName(event.target.value)} maxLength={80} /></label>
+            <label>身份描述<textarea value={lobeDescription} onChange={(event) => setLobeDescription(event.target.value)} maxLength={500} rows={4} /></label>
+            <p className="lobe-setup-note">确认后会通过 LobeHub 官方 CLI 创建身份并在本机保存凭据。应用不会读取或复制令牌。</p>
+            <div className="lobe-setup-actions"><Button variant="secondary" onPress={() => setShowLobeSetup(false)}>取消</Button><Button variant="primary" isDisabled={lobeSetupBusy || lobeName.trim().length < 2 || lobeDescription.trim().length < 10} onPress={() => void registerLobeHub()}>{lobeSetupBusy ? '设置中…' : '确认设置'}</Button></div>
+          </section>
+        </div>
       )}
 
     </ScrollShadow>
@@ -804,6 +882,18 @@ function MarketPagination({ page, total, pageSize, copy, onChange }: { page: num
           ? <Pagination.Item key={`ellipsis-${index}`}><Pagination.Ellipsis /></Pagination.Item>
           : <Pagination.Item key={item}><Pagination.Link isActive={item === page} onPress={() => onChange(item)}>{item}</Pagination.Link></Pagination.Item>)}
         <Pagination.Item><Pagination.Next isDisabled={page === pages} onPress={() => onChange(page + 1)}>{copy.next}<Pagination.NextIcon /></Pagination.Next></Pagination.Item>
+      </Pagination.Content>
+    </Pagination>
+  )
+}
+
+function MarketCursorPagination({ page, hasMore, copy, onChange }: { page: number; hasMore: boolean; copy: ReturnType<typeof marketCopy>; onChange: (page: number) => void }): React.JSX.Element {
+  return (
+    <Pagination className="market-pagination" size="sm" aria-label={copy.pagination}>
+      <Pagination.Summary>{`第 ${page} 批`}</Pagination.Summary>
+      <Pagination.Content>
+        <Pagination.Item><Pagination.Previous isDisabled={page === 1} onPress={() => onChange(page - 1)}><Pagination.PreviousIcon />{copy.previous}</Pagination.Previous></Pagination.Item>
+        <Pagination.Item><Pagination.Next isDisabled={!hasMore} onPress={() => onChange(page + 1)}>{copy.next}<Pagination.NextIcon /></Pagination.Next></Pagination.Item>
       </Pagination.Content>
     </Pagination>
   )
@@ -876,6 +966,12 @@ function MarketSourceIcon({ source }: { source: MarketSource }): React.JSX.Eleme
     case 'builtin-modelscope-skills':
       icon = <ModelScope.Color {...iconProps} />
       break
+    case 'builtin-clawhub':
+      icon = <OpenClaw.Color {...iconProps} />
+      break
+    case 'builtin-lobehub-skills':
+      icon = <LobeHub.Color {...iconProps} />
+      break
     case 'builtin-vercel-agent-skills':
       icon = <Vercel {...iconProps} />
       break
@@ -917,6 +1013,8 @@ function MarketBrandGlyph({ sourceId }: { sourceId: string }): React.JSX.Element
     case 'builtin-tencent-skillhub': return <Tencent {...iconProps} />
     case 'builtin-redskill': return <RedSkillLogo monochrome />
     case 'builtin-modelscope-skills': return <ModelScope {...iconProps} />
+    case 'builtin-clawhub': return <OpenClaw {...iconProps} />
+    case 'builtin-lobehub-skills': return <LobeHub {...iconProps} />
     default: return <FolderGit2 {...iconProps} />
   }
 }

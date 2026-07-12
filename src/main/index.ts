@@ -194,6 +194,8 @@ function registerIpc(): void {
   ipcMain.handle('market:search', async (_event, input) => skillMarketManager.search(input))
   ipcMain.handle('market:preview', async (_event, input) => skillMarketManager.preview(input))
   ipcMain.handle('market:listInstallTargets', async () => skillMarketManager.listInstallTargets())
+  ipcMain.handle('market:lobehubStatus', async () => skillMarketManager.getLobeHubStatus())
+  ipcMain.handle('market:registerLobehub', async (_event, input) => skillMarketManager.registerLobeHub(input))
   ipcMain.handle('market:install', async (_event, input) => skillMarketManager.install(input))
   ipcMain.handle('market:importLocal', async (_event, input) => {
     const result = await dialog.showOpenDialog({

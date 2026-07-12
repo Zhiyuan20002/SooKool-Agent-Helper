@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { createRequire } from 'module'
 import { spawn } from 'child_process'
 import {
   existsSync,
@@ -18,7 +19,7 @@ import { MarketCatalogCache, type CatalogCacheRead } from './market-catalog-cach
 import { extractCompatibleZip } from './archive-extractor'
 import { mergeCatalogRecords } from './market-catalog-utils'
 
-export type MarketSourceKind = 'skills-sh' | 'skillhub' | 'redskill' | 'modelscope' | 'git' | 'local'
+export type MarketSourceKind = 'skills-sh' | 'skillhub' | 'redskill' | 'modelscope' | 'clawhub' | 'lobehub' | 'git' | 'local'
 
 export interface CatalogSkillRecord {
   name: string
@@ -38,6 +39,8 @@ export interface CatalogPage {
   total: number
   page: number
   pageSize: number
+  paginationMode?: 'page' | 'cursor'
+  hasMore?: boolean
 }
 
 export interface MarketPreviewFile {
@@ -68,17 +71,45 @@ const maxImagePreviewBytes = 8 * 1024 * 1024
 const maxPreviewFiles = 160
 const cacheMaxAgeMs = 5 * 60 * 1000
 const catalogMemoryMaxAgeMs = 15 * 60 * 1000
+const maxMarketArchiveBytes = 32 * 1024 * 1024
+const maxCliOutputBytes = 2 * 1024 * 1024
+const moduleRequire = createRequire(import.meta.url)
+const lobeHubCliPath = moduleRequire.resolve('@lobehub/market-cli/dist/cli.js')
 
 export class MarketSourceLoader {
   private catalogCache = new Map<string, { records: CatalogSkillRecord[]; cachedAt: number }>()
   private catalogRequests = new Map<string, { promise: Promise<CatalogSkillRecord[]>; refresh: boolean }>()
   private modelScopeMaterializations = new Map<string, Promise<string>>()
+  private lobeHubMaterializations = new Map<string, Promise<string>>()
   private redSkillDefaultCatalogs = new Map<string, { records: CatalogSkillRecord[]; cachedAt: number }>()
   private redSkillDefaultRequests = new Map<string, Promise<CatalogSkillRecord[]>>()
+  private clawHubCursors = new Map<string, Map<number, string | undefined>>()
   private catalogDiskCache: MarketCatalogCache
 
   constructor(private cacheRoot: string) {
     this.catalogDiskCache = new MarketCatalogCache(join(cacheRoot, 'catalogs'))
+  }
+
+  async getLobeHubStatus(): Promise<{ ready: boolean; profile?: Record<string, unknown>; error?: string }> {
+    try {
+      const output = await runLobeHubCli(['profile', 'get', '--output', 'json'])
+      return { ready: true, profile: parseJsonOutput(output) }
+    } catch (error) {
+      const message = normalizeLoaderError(error)
+      if (/no credentials|register/i.test(message)) return { ready: false }
+      return { ready: false, error: message }
+    }
+  }
+
+  async registerLobeHub(input: { name: string; description: string; source: string }): Promise<{ ready: boolean; profile?: Record<string, unknown>; error?: string }> {
+    const name = input.name.trim()
+    const description = input.description.trim()
+    const source = input.source.trim()
+    if (name.length < 2 || name.length > 80) throw new Error('LobeHub 名称需为 2–80 个字符。')
+    if (description.length < 10 || description.length > 500) throw new Error('LobeHub 描述需为 10–500 个字符。')
+    if (!/^[a-z][a-z0-9-]{1,30}$/.test(source)) throw new Error('LobeHub 来源标识无效。')
+    await runLobeHubCli(['register', '--name', name, '--description', description, '--source', source])
+    return this.getLobeHubStatus()
   }
 
   readCachedCatalog(source: string, kind: MarketSourceKind): CatalogCacheRead | null {
@@ -142,6 +173,8 @@ export class MarketSourceLoader {
     const safePage = Math.max(1, Math.floor(page))
     const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)))
     if (kind === 'skillhub') return listSkillHubCatalog(source, safePage, safePageSize, query)
+    if (kind === 'clawhub') return this.listClawHubPage(source, safePage, safePageSize, query)
+    if (kind === 'lobehub') return listLobeHubCatalog(safePage, safePageSize, query)
     if (kind === 'redskill') {
       if (query.trim()) return listRedSkillCatalog(source, safePage, safePageSize, query)
       const sourceKey = source.trim().toLowerCase()
@@ -161,6 +194,18 @@ export class MarketSourceLoader {
     if (kind === 'modelscope') return listModelScopeCatalog(source, safePage, safePageSize, query)
     const records = await this.list(source, kind)
     return { records, total: records.length, page: 1, pageSize: records.length || safePageSize }
+  }
+
+  private async listClawHubPage(source: string, page: number, pageSize: number, query: string): Promise<CatalogPage> {
+    normalizeClawHubSource(source)
+    if (query.trim()) return listClawHubSearch(query, pageSize)
+    const cursors = this.clawHubCursors.get(source) || new Map<number, string | undefined>([[1, undefined]])
+    const cursor = cursors.get(page)
+    if (page > 1 && cursor === undefined && !cursors.has(page)) throw new Error('ClawHub 仅支持按顺序加载下一批。')
+    const result = await listClawHubCatalog(page, pageSize, cursor)
+    if (result.nextCursor) cursors.set(page + 1, result.nextCursor)
+    this.clawHubCursors.set(source, cursors)
+    return result.page
   }
 
   private async loadRedSkillDefaultCatalog(source: string): Promise<CatalogSkillRecord[]> {
@@ -227,6 +272,14 @@ export class MarketSourceLoader {
       const directory = await this.materializeModelScopeSkill(source, skillName, refresh)
       return readCatalogPreview(directory, directory)
     }
+    if (kind === 'clawhub') {
+      const directory = await this.materializeClawHubSkill(source, skillName, refresh)
+      return readCatalogPreview(directory, directory)
+    }
+    if (kind === 'lobehub') {
+      const directory = await this.materializeLobeHubSkill(source, skillName, refresh)
+      return readCatalogPreview(directory, directory)
+    }
     const resolved = await this.resolveSource(source, kind, refresh)
     const selected = findCatalogSkillDirectory(resolved, skillName)
     if (!selected) throw new Error(`市场源中未找到 Skill：${skillName}`)
@@ -243,10 +296,80 @@ export class MarketSourceLoader {
     if (kind === 'skillhub') return this.materializeSkillHubSkill(source, skillName, refresh)
     if (kind === 'redskill') return this.materializeRedSkill(source, skillName, refresh)
     if (kind === 'modelscope') return this.materializeModelScopeSkill(source, skillName, refresh)
+    if (kind === 'clawhub') return this.materializeClawHubSkill(source, skillName, refresh)
+    if (kind === 'lobehub') return this.materializeLobeHubSkill(source, skillName, refresh)
     const resolved = await this.resolveSource(source, kind, refresh)
     const selected = findCatalogSkillDirectory(resolved, skillName)
     if (!selected) throw new Error(`市场源中未找到 Skill：${skillName}`)
     return selected
+  }
+
+  private async materializeClawHubSkill(source: string, skillName: string, refresh: boolean): Promise<string> {
+    normalizeClawHubSource(source)
+    const slug = normalizeRemoteSlug(skillName)
+    const key = createHash('sha256').update(`clawhub:${slug}`).digest('hex').slice(0, 20)
+    const target = join(this.cacheRoot, `clawhub-${key}`)
+    if (!refresh && existsSync(join(target, 'SKILL.md'))) return target
+    const staging = `${target}.staging`
+    const zipPath = join(this.cacheRoot, `clawhub-${key}.zip`)
+    rmSync(staging, { recursive: true, force: true })
+    try {
+      const response = await fetch(`https://clawhub.ai/api/v1/download?slug=${encodeURIComponent(slug)}`, {
+        headers: { Accept: 'application/zip', 'User-Agent': 'SooKool-Agent-Helper/0.1' }
+      })
+      if (!response.ok) throw new Error(`ClawHub 下载失败：HTTP ${response.status}`)
+      writeFileSync(zipPath, await readResponseWithLimit(response, maxMarketArchiveBytes, 'ClawHub 下载包'))
+      await extractCompatibleZip(zipPath, staging)
+      const directory = findSkillDirectories(staging)[0]
+      if (!directory) throw new Error('ClawHub 下载包中没有有效的 SKILL.md。')
+      rmSync(target, { recursive: true, force: true })
+      if (directory === staging) renameDirectory(staging, target)
+      else {
+        renameDirectory(directory, target)
+        rmSync(staging, { recursive: true, force: true })
+      }
+    } finally {
+      rmSync(zipPath, { force: true })
+      rmSync(staging, { recursive: true, force: true })
+    }
+    return target
+  }
+
+  private async materializeLobeHubSkill(source: string, skillName: string, refresh: boolean): Promise<string> {
+    normalizeLobeHubSource(source)
+    const identifier = normalizeMarketplaceIdentifier(skillName)
+    const key = createHash('sha256').update(`lobehub:${identifier}`).digest('hex').slice(0, 20)
+    const parent = join(this.cacheRoot, `lobehub-${key}`)
+    const target = join(parent, identifier)
+    if (!refresh && existsSync(join(target, 'SKILL.md'))) return target
+    const existing = this.lobeHubMaterializations.get(key)
+    if (existing) return existing
+    const request = (async () => {
+      const staging = `${parent}.staging`
+      rmSync(staging, { recursive: true, force: true })
+      mkdirSync(staging, { recursive: true })
+      try {
+        await runLobeHubCli(['skills', 'install', identifier, '--dir', staging])
+        const installed = existsSync(join(staging, identifier, 'SKILL.md'))
+          ? join(staging, identifier)
+          : findSkillDirectories(staging)[0]
+        if (!installed) throw new Error('LobeHub 安装包中没有有效的 SKILL.md。')
+        rmSync(parent, { recursive: true, force: true })
+        renameDirectory(staging, parent)
+        const resolved = installed === join(staging, identifier)
+          ? join(parent, identifier)
+          : join(parent, relative(staging, installed))
+        return resolved
+      } finally {
+        rmSync(staging, { recursive: true, force: true })
+      }
+    })()
+    this.lobeHubMaterializations.set(key, request)
+    try {
+      return await request
+    } finally {
+      this.lobeHubMaterializations.delete(key)
+    }
   }
 
   async materializeSkillHubSkill(
@@ -491,6 +614,181 @@ async function listSkillHubCatalog(source: string, page = 1, pageSize = 100, que
 const redSkillApiBase = 'https://edith.xiaohongshu.com/api/sns/v1/creator/red_skill'
 const modelScopeApiBase = 'https://modelscope.cn/openapi/v1'
 
+async function listClawHubCatalog(
+  page: number,
+  pageSize: number,
+  cursor?: string
+): Promise<{ page: CatalogPage; nextCursor?: string }> {
+  const params = new URLSearchParams({ limit: String(pageSize), sort: 'downloads' })
+  if (cursor) params.set('cursor', cursor)
+  const response = await fetch(`https://clawhub.ai/api/v1/skills?${params.toString()}`, {
+    headers: { Accept: 'application/json', 'User-Agent': 'SooKool-Agent-Helper/0.1' }
+  })
+  if (!response.ok) throwRemoteHttpError('ClawHub 目录加载', response.status)
+  const data = (await response.json()) as { items?: unknown[]; nextCursor?: unknown }
+  if (!Array.isArray(data.items)) throw new Error('ClawHub 返回了无法识别的目录数据。')
+  const records = data.items.flatMap(mapClawHubItem)
+  const nextCursor = typeof data.nextCursor === 'string' ? data.nextCursor : undefined
+  return {
+    page: {
+      records,
+      total: records.length,
+      page,
+      pageSize,
+      paginationMode: 'cursor',
+      hasMore: Boolean(nextCursor)
+    },
+    nextCursor
+  }
+}
+
+async function listClawHubSearch(query: string, pageSize: number): Promise<CatalogPage> {
+  const params = new URLSearchParams({ q: query.trim(), limit: String(pageSize) })
+  const response = await fetch(`https://clawhub.ai/api/v1/search?${params.toString()}`, {
+    headers: { Accept: 'application/json', 'User-Agent': 'SooKool-Agent-Helper/0.1' }
+  })
+  if (!response.ok) throwRemoteHttpError('ClawHub 搜索', response.status)
+  const data = (await response.json()) as { results?: unknown[] }
+  if (!Array.isArray(data.results)) throw new Error('ClawHub 返回了无法识别的搜索数据。')
+  const records = data.results.flatMap(mapClawHubItem)
+  return { records, total: records.length, page: 1, pageSize, paginationMode: 'cursor', hasMore: false }
+}
+
+function mapClawHubItem(item: unknown): CatalogSkillRecord[] {
+  if (!item || typeof item !== 'object') return []
+  const skill = item as Record<string, unknown>
+  const slug = String(skill.slug || '').trim()
+  if (!slug) return []
+  const latest = skill.latestVersion && typeof skill.latestVersion === 'object'
+    ? skill.latestVersion as Record<string, unknown>
+    : null
+  const owner = skill.owner && typeof skill.owner === 'object' ? skill.owner as Record<string, unknown> : null
+  const topics = Array.isArray(skill.topics) ? skill.topics.map(String) : []
+  return [{
+    name: String(skill.displayName || slug),
+    description: String(skill.summary || skill.description || '暂无描述'),
+    author: String(skill.ownerHandle || owner?.displayName || owner?.handle || 'ClawHub'),
+    version: String(skill.version || latest?.version || '') || undefined,
+    category: inferCategory(slug, String(skill.summary || ''), topics),
+    tags: topics.slice(0, 6),
+    sourcePath: slug,
+    skillDirectory: '',
+    hasScripts: false
+  }]
+}
+
+async function listLobeHubCatalog(page: number, pageSize: number, query: string): Promise<CatalogPage> {
+  const args = ['skills', 'search', '--page', String(page), '--page-size', String(pageSize), '--locale', 'zh-CN', '--output', 'json']
+  if (query.trim()) args.push('--q', query.trim())
+  const raw = parseJsonOutput(await runLobeHubCli(args))
+  const items = Array.isArray(raw.items) ? raw.items : []
+  const records = items.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const skill = item as Record<string, unknown>
+    const identifier = String(skill.identifier || '').trim()
+    if (!identifier) return []
+    const tags = Array.isArray(skill.tags) ? skill.tags.map(String) : []
+    return [{
+      name: String(skill.name || identifier),
+      description: String(skill.description || '暂无描述'),
+      author: String(skill.author || identifier.split('-')[0] || 'LobeHub'),
+      version: String(skill.version || '') || undefined,
+      category: String(skill.category || '效率工具'),
+      tags: tags.slice(0, 6),
+      sourcePath: identifier,
+      skillDirectory: '',
+      hasScripts: false
+    }]
+  })
+  return {
+    records,
+    total: Number(raw.totalCount) || records.length,
+    page: Number(raw.currentPage) || page,
+    pageSize: Number(raw.pageSize) || pageSize,
+    paginationMode: 'page',
+    hasMore: page < (Number(raw.totalPages) || page)
+  }
+}
+
+function runLobeHubCli(args: string[]): Promise<string> {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(process.execPath, [lobeHubCliPath, ...args], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+    const finish = (callback: () => void): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      clearTimeout(forceKill)
+      callback()
+    }
+    const forceKill = setTimeout(() => finish(() => reject(new Error('LobeHub CLI 执行超时。'))), 63_000)
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM')
+      setTimeout(() => child.kill('SIGKILL'), 2_000).unref()
+    }, 60_000)
+    timeout.unref()
+    forceKill.unref()
+    const append = (current: string, chunk: Buffer): string => {
+      if (Buffer.byteLength(current) + chunk.length > maxCliOutputBytes) {
+        child.kill('SIGKILL')
+        finish(() => reject(new Error('LobeHub CLI 输出超过安全上限。')))
+        return current
+      }
+      return current + chunk.toString()
+    }
+    child.stdout.on('data', (chunk: Buffer) => (stdout = append(stdout, chunk)))
+    child.stderr.on('data', (chunk: Buffer) => (stderr = append(stderr, chunk)))
+    child.on('error', (error) => finish(() => reject(error)))
+    child.on('close', (code) => {
+      finish(() => {
+        if (code === 0) resolvePromise(stdout.trim())
+        else reject(new Error((stderr || stdout).trim() || `LobeHub CLI 退出码：${code}`))
+      })
+    })
+  })
+}
+
+async function readResponseWithLimit(response: Response, limit: number, label: string): Promise<Buffer> {
+  const declared = Number(response.headers.get('content-length') || 0)
+  if (declared > limit) throw new Error(`${label}超过 ${Math.floor(limit / 1024 / 1024)} MB 安全上限。`)
+  if (!response.body) throw new Error(`${label}没有响应内容。`)
+  const reader = response.body.getReader()
+  const chunks: Buffer[] = []
+  let size = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > limit) {
+      await reader.cancel()
+      throw new Error(`${label}超过 ${Math.floor(limit / 1024 / 1024)} MB 安全上限。`)
+    }
+    chunks.push(Buffer.from(value))
+  }
+  return Buffer.concat(chunks, size)
+}
+
+function parseJsonOutput(output: string): Record<string, unknown> {
+  const start = output.indexOf('{')
+  const end = output.lastIndexOf('}')
+  if (start < 0 || end < start) throw new Error('LobeHub CLI 没有返回有效 JSON。')
+  return JSON.parse(output.slice(start, end + 1)) as Record<string, unknown>
+}
+
+function throwRemoteHttpError(label: string, status: number): never {
+  if (status === 429) throw new Error(`${label}受到限流，请稍后重试。`)
+  throw new Error(`${label}失败：HTTP ${status}`)
+}
+
+function normalizeLoaderError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 async function listRedSkillCatalog(source: string, page = 1, pageSize = 100, query = ''): Promise<CatalogPage> {
   normalizeRedSkillSource(source)
   const params = new URLSearchParams({ q: query.trim() || 'skill', limit: String(pageSize), page: String(page) })
@@ -623,6 +921,18 @@ function normalizeModelScopeSource(source: string): void {
   }
 }
 
+function normalizeClawHubSource(source: string): void {
+  if (!/^https:\/\/(?:www\.)?clawhub\.ai\/?$/i.test(source.trim())) {
+    throw new Error('ClawHub 来源必须使用官方地址。')
+  }
+}
+
+function normalizeLobeHubSource(source: string): void {
+  if (!/^https:\/\/(?:www\.)?lobehub\.com\/skills\/?$/i.test(source.trim())) {
+    throw new Error('LobeHub 来源必须使用官方 Skills 地址。')
+  }
+}
+
 function normalizeModelScopeIdentifier(value: string): string {
   const identifier = value.trim()
   if (!/^@?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i.test(identifier)) {
@@ -713,7 +1023,15 @@ function renameDirectory(from: string, to: string): void {
 export function inferMarketSourceKind(source: string): MarketSourceKind {
   if (/^https:\/\/redskill\.xiaohongshu\.net\/?$/i.test(source.trim())) return 'redskill'
   if (/^https:\/\/(?:www\.)?modelscope\.cn\/skills\/?$/i.test(source.trim())) return 'modelscope'
+  if (/^https:\/\/(?:www\.)?clawhub\.ai\/?$/i.test(source.trim())) return 'clawhub'
+  if (/^https:\/\/(?:www\.)?lobehub\.com\/skills\/?$/i.test(source.trim())) return 'lobehub'
   return looksLikeLocalPath(source) ? 'local' : 'git'
+}
+
+function normalizeMarketplaceIdentifier(value: string): string {
+  const identifier = value.trim()
+  if (!/^[a-z0-9][a-z0-9._-]{1,191}$/i.test(identifier)) throw new Error('市场 Skill 标识无效。')
+  return identifier
 }
 
 function readCatalogSkill(directory: string, sourceRoot: string): CatalogSkillRecord {
