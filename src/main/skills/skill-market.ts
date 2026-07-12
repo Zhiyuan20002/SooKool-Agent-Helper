@@ -61,6 +61,9 @@ export interface MarketListSkillsInput {
   sourceId?: string
   source?: string
   refresh?: boolean
+  page?: number
+  pageSize?: number
+  query?: string
 }
 
 export interface MarketSearchInput {
@@ -113,6 +116,9 @@ export interface MarketSkillResult {
   cacheHit?: boolean
   isStale?: boolean
   cachedAt?: number
+  total?: number
+  page?: number
+  pageSize?: number
 }
 
 export interface MarketInstallResult {
@@ -312,6 +318,24 @@ export class SkillMarketManager {
   async listSkills(input: MarketListSkillsInput): Promise<MarketSkillResult> {
     const source = this.resolveSource(input)
     try {
+      if (['skillhub', 'redskill', 'modelscope'].includes(source.kind)) {
+        const result = await this.loader.listPage(
+          source.source,
+          source.kind,
+          input.page || 1,
+          input.pageSize || 100,
+          input.query || ''
+        )
+        return {
+          skills: this.mapCatalogSkills(source, result.records),
+          command: `catalog ${source.source} page ${result.page}`,
+          exitCode: 0,
+          error: null,
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize
+        }
+      }
       const records = await this.loader.list(source.source, source.kind, input.refresh)
       return {
         skills: this.mapCatalogSkills(source, records),

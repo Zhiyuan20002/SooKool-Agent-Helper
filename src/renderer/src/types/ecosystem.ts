@@ -104,6 +104,9 @@ export interface MarketSkillResult {
   cacheHit?: boolean
   isStale?: boolean
   cachedAt?: number
+  total?: number
+  page?: number
+  pageSize?: number
 }
 
 export interface MarketInstallResult {

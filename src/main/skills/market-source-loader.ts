@@ -32,6 +32,13 @@ export interface CatalogSkillRecord {
   hasScripts: boolean
 }
 
+export interface CatalogPage {
+  records: CatalogSkillRecord[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export interface MarketPreviewFile {
   name: string
   relativePath: string
@@ -121,6 +128,22 @@ export class MarketSourceLoader {
     return request
   }
 
+  async listPage(
+    source: string,
+    kind: MarketSourceKind,
+    page: number,
+    pageSize: number,
+    query = ''
+  ): Promise<CatalogPage> {
+    const safePage = Math.max(1, Math.floor(page))
+    const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)))
+    if (kind === 'skillhub') return listSkillHubCatalog(source, safePage, safePageSize, query)
+    if (kind === 'redskill') return listRedSkillCatalog(source, safePage, safePageSize, query)
+    if (kind === 'modelscope') return listModelScopeCatalog(source, safePage, safePageSize, query)
+    const records = await this.list(source, kind)
+    return { records, total: records.length, page: 1, pageSize: records.length || safePageSize }
+  }
+
   private rememberCatalog(key: string, value: { records: CatalogSkillRecord[]; cachedAt: number }): void {
     this.catalogCache.delete(key)
     this.catalogCache.set(key, value)
@@ -134,9 +157,9 @@ export class MarketSourceLoader {
     kind: MarketSourceKind,
     refresh: boolean
   ): Promise<CatalogSkillRecord[]> {
-    if (kind === 'skillhub') return listSkillHubCatalog(source)
-    if (kind === 'redskill') return listRedSkillCatalog(source)
-    if (kind === 'modelscope') return listModelScopeCatalog(source)
+    if (kind === 'skillhub') return (await listSkillHubCatalog(source)).records
+    if (kind === 'redskill') return (await listRedSkillCatalog(source)).records
+    if (kind === 'modelscope') return (await listModelScopeCatalog(source)).records
     const resolved = await this.resolveSource(source, kind, refresh)
     const searchRoot = resolveWithinSource(resolved.root, resolved.prefix)
     return findSkillDirectories(searchRoot).map((directory) => readCatalogSkill(directory, resolved.root))
@@ -378,15 +401,18 @@ export class MarketSourceLoader {
   }
 }
 
-async function listSkillHubCatalog(source: string): Promise<CatalogSkillRecord[]> {
+async function listSkillHubCatalog(source: string, page = 1, pageSize = 100, query = ''): Promise<CatalogPage> {
   const base = normalizeSkillHubBase(source)
-  const response = await fetch(`${base}/api/v1/showcase/recommended`, {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (query.trim()) params.set('keyword', query.trim())
+  const response = await fetch(`${base}/api/skills?${params.toString()}`, {
     headers: { Accept: 'application/json', 'User-Agent': 'SooKool-Agent-Helper/0.1' }
   })
   if (!response.ok) throw new Error(`SkillHub 目录加载失败：HTTP ${response.status}`)
-  const raw = (await response.json()) as { skills?: unknown[] }
-  if (!Array.isArray(raw.skills)) throw new Error('SkillHub 返回了无法识别的目录数据。')
-  return raw.skills.slice(0, 120).flatMap((item) => {
+  const envelope = (await response.json()) as Record<string, unknown>
+  const data = (envelope.data && typeof envelope.data === 'object' ? envelope.data : envelope) as Record<string, unknown>
+  if (!Array.isArray(data.skills)) throw new Error('SkillHub 返回了无法识别的目录数据。')
+  const records = data.skills.flatMap((item) => {
     if (!item || typeof item !== 'object') return []
     const skill = item as Record<string, unknown>
     const slug = String(skill.slug || '').trim()
@@ -415,21 +441,23 @@ async function listSkillHubCatalog(source: string): Promise<CatalogSkillRecord[]
       }
     ]
   })
+  return { records, total: Number(data.total) || records.length, page, pageSize }
 }
 
 const redSkillApiBase = 'https://edith.xiaohongshu.com/api/sns/v1/creator/red_skill'
 const modelScopeApiBase = 'https://modelscope.cn/openapi/v1'
 
-async function listRedSkillCatalog(source: string): Promise<CatalogSkillRecord[]> {
+async function listRedSkillCatalog(source: string, page = 1, pageSize = 100, query = ''): Promise<CatalogPage> {
   normalizeRedSkillSource(source)
-  const response = await fetch(`${redSkillApiBase}/search_published_skills?q=skill&limit=100&page=1`, {
+  const params = new URLSearchParams({ q: query.trim() || 'skill', limit: String(pageSize), page: String(page) })
+  const response = await fetch(`${redSkillApiBase}/search_published_skills?${params.toString()}`, {
     headers: { Accept: 'application/json', 'User-Agent': 'SooKool-Agent-Helper/0.1' }
   })
   if (!response.ok) throw new Error(`Red Skill 目录加载失败：HTTP ${response.status}`)
   const envelope = (await response.json()) as Record<string, unknown>
   const data = (envelope.data && typeof envelope.data === 'object' ? envelope.data : envelope) as Record<string, unknown>
   if (!Array.isArray(data.results)) throw new Error('Red Skill 返回了无法识别的目录数据。')
-  return data.results.flatMap((item) => {
+  const records = data.results.flatMap((item) => {
     if (!item || typeof item !== 'object') return []
     const skill = item as Record<string, unknown>
     const identifier = String(skill.identifier || skill.slug || '').trim()
@@ -447,18 +475,21 @@ async function listRedSkillCatalog(source: string): Promise<CatalogSkillRecord[]
       hasScripts: false
     }]
   })
+  return { records, total: Number(data.total) || records.length, page, pageSize }
 }
 
-async function listModelScopeCatalog(source: string): Promise<CatalogSkillRecord[]> {
+async function listModelScopeCatalog(source: string, page = 1, pageSize = 100, query = ''): Promise<CatalogPage> {
   normalizeModelScopeSource(source)
-  const response = await fetch(`${modelScopeApiBase}/skills?page_number=1&page_size=100`, {
+  const params = new URLSearchParams({ page_number: String(page), page_size: String(pageSize) })
+  if (query.trim()) params.set('search', query.trim())
+  const response = await fetch(`${modelScopeApiBase}/skills?${params.toString()}`, {
     headers: { Accept: 'application/json', 'User-Agent': 'SooKool-Agent-Helper/0.1' }
   })
   if (!response.ok) throw new Error(`ModelScope 目录加载失败：HTTP ${response.status}`)
   const envelope = (await response.json()) as Record<string, unknown>
   const data = (envelope.data && typeof envelope.data === 'object' ? envelope.data : envelope) as Record<string, unknown>
   if (!Array.isArray(data.skills)) throw new Error('ModelScope 返回了无法识别的目录数据。')
-  return data.skills.flatMap((item) => {
+  const records = data.skills.flatMap((item) => {
     if (!item || typeof item !== 'object') return []
     const skill = item as Record<string, unknown>
     const identifier = String(skill.id || '').trim()
@@ -475,6 +506,7 @@ async function listModelScopeCatalog(source: string): Promise<CatalogSkillRecord
       hasScripts: false
     }]
   })
+  return { records, total: Number(data.total) || records.length, page, pageSize }
 }
 
 function readCatalogPreview(directory: string, sourceRoot: string): CatalogSkillPreview {

@@ -60,6 +60,8 @@ import type {
 type PreviewTab = 'overview' | 'content' | 'files'
 type SortMode = 'featured' | 'name' | 'source'
 const rendererCatalogMaxAgeMs = 15 * 60 * 1000
+const remoteCatalogBatchSize = 100
+const remoteMarketKinds = new Set(['skillhub', 'redskill', 'modelscope'])
 
 const fallbackSources: MarketSource[] = [
   {
@@ -184,7 +186,7 @@ export function SkillMarket(): React.JSX.Element {
   const previewRequestRef = useRef(0)
   const marketSchedulerRef = useRef(createMarketTaskScheduler(3))
   const preloadTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const catalogMemoryRef = useRef(createBoundedMarketCache<string, { skills: MarketSkill[]; cachedAt: number }>(8))
+  const catalogMemoryRef = useRef(createBoundedMarketCache<string, { skills: MarketSkill[]; cachedAt: number; total?: number }>(8))
   const preloadRequestsRef = useRef(new Map<string, Promise<void>>())
   const [sources, setSources] = useState<MarketSource[]>(fallbackSources)
   const [selectedSourceId, setSelectedSourceId] = useState('builtin-anthropic-skills')
@@ -203,6 +205,9 @@ export function SkillMarket(): React.JSX.Element {
   const [showSources, setShowSources] = useState(false)
   const [page, setPage] = useState(1)
   const [columnCount, setColumnCount] = useState(2)
+  const pageSize = columnCount * 10
+  const [catalogTotal, setCatalogTotal] = useState(0)
+  const [catalogBatchPage, setCatalogBatchPage] = useState(1)
 
   useEffect(() => {
     void initializeMarket()
@@ -278,13 +283,16 @@ export function SkillMarket(): React.JSX.Element {
     try {
       const source = sources.find((item) => item.id === sourceId)
       if (!source) return
-      if (local) {
+      const isRemote = remoteMarketKinds.has(source.kind)
+      if (local && !isRemote) {
         setSkills(local.skills)
+        setCatalogTotal(local.total ?? local.skills.length)
+        setCatalogBatchPage(1)
         setLoading(false)
         if (localIsFresh) return
         setRefreshing(true)
       }
-      if (!refresh && !local) {
+      if (!isRemote && !refresh && !local) {
         const cached = await window.aiHelper.invoke<MarketSkillResult>('market:listCachedSkills', { sourceId })
         if (requestId !== catalogRequestRef.current) return
         if (cached.cacheHit) {
@@ -300,7 +308,9 @@ export function SkillMarket(): React.JSX.Element {
       const result = await marketSchedulerRef.current.schedule(() =>
         window.aiHelper.invoke<MarketSkillResult>('market:listSkills', {
           sourceId,
-          refresh: refresh || hasCachedContent
+          refresh: refresh || hasCachedContent,
+          page: 1,
+          pageSize: isRemote ? pageSize : undefined
         })
       , 'high')
       if (requestId !== catalogRequestRef.current) return
@@ -309,8 +319,11 @@ export function SkillMarket(): React.JSX.Element {
         setError(result.error)
       } else {
         const nextSkills = dedupeSkills(result.skills)
-        catalogMemoryRef.current.set(sourceId, { skills: nextSkills, cachedAt: Date.now() })
+        const total = result.total ?? nextSkills.length
+        catalogMemoryRef.current.set(sourceId, { skills: nextSkills, cachedAt: Date.now(), total })
         setSkills(nextSkills)
+        setCatalogTotal(total)
+        setCatalogBatchPage(1)
       }
     } catch (error) {
       if (requestId === catalogRequestRef.current) setError(formatError(error))
@@ -373,10 +386,11 @@ export function SkillMarket(): React.JSX.Element {
         : Promise.resolve({} as Record<string, MarketSkillResult>)
 
       const sourceTasks = enabledSources.map(async (source) => {
+        const isRemote = remoteMarketKinds.has(source.kind)
         const local = catalogMemoryRef.current.get(source.id)
         if (local) {
           publish(local.skills.filter((skill) => marketSkillMatchesQuery(skill, query)))
-          if (Date.now() - local.cachedAt < rendererCatalogMaxAgeMs) {
+          if (!isRemote && Date.now() - local.cachedAt < rendererCatalogMaxAgeMs) {
             markComplete()
             return
           }
@@ -391,7 +405,7 @@ export function SkillMarket(): React.JSX.Element {
               catalogMemoryRef.current.set(source.id, { skills: nextSkills, cachedAt: cached.cachedAt || Date.now() })
               publish(nextSkills.filter((skill) => marketSkillMatchesQuery(skill, query)))
             }
-            if (cached.cacheHit && !cached.isStale) {
+            if (!isRemote && cached.cacheHit && !cached.isStale) {
               markComplete()
               return
             }
@@ -403,7 +417,10 @@ export function SkillMarket(): React.JSX.Element {
           const result = await marketSchedulerRef.current.schedule(() =>
             window.aiHelper.invoke<MarketSkillResult>('market:listSkills', {
               sourceId: source.id,
-              refresh: Boolean(local || cached?.isStale)
+              refresh: Boolean(local || cached?.isStale),
+              page: 1,
+              pageSize: isRemote ? remoteCatalogBatchSize : undefined,
+              query: isRemote ? query.trim() : undefined
             })
           )
           const nextSkills = dedupeSkills(result.skills)
@@ -479,13 +496,43 @@ export function SkillMarket(): React.JSX.Element {
   }, [activeCategory, language, query, selectedSourceId, skills, sortMode])
 
   const selectedSource = sources.find((source) => source.id === selectedSourceId)
-  const pageSize = columnCount * 10
-  const pageCount = Math.max(1, Math.ceil(visibleSkills.length / pageSize))
-  const pagedSkills = visibleSkills.slice((page - 1) * pageSize, page * pageSize)
+  const remoteCatalog = Boolean(selectedSource && remoteMarketKinds.has(selectedSource.kind))
+  const effectiveTotal = remoteCatalog && activeCategory === 'all' && !query.trim() ? catalogTotal : visibleSkills.length
+  const pageCount = Math.max(1, Math.ceil(effectiveTotal / pageSize))
+  const pagedSkills = remoteCatalog ? visibleSkills : visibleSkills.slice((page - 1) * pageSize, page * pageSize)
 
-  function changePage(nextPage: number): void {
-    setPage(nextPage)
+  async function changePage(nextPage: number): Promise<void> {
     requestAnimationFrame(() => listTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    if (!remoteCatalog || !selectedSource) {
+      setPage(nextPage)
+      return
+    }
+    if (nextPage === catalogBatchPage) {
+      setPage(nextPage)
+      return
+    }
+    const requestId = ++catalogRequestRef.current
+    setRefreshing(true)
+    setError(null)
+    try {
+      const result = await marketSchedulerRef.current.schedule(() =>
+        window.aiHelper.invoke<MarketSkillResult>('market:listSkills', {
+          sourceId: selectedSource.id,
+          page: nextPage,
+          pageSize
+        })
+      , 'high')
+      if (requestId !== catalogRequestRef.current) return
+      if (result.error) throw new Error(result.error)
+      setSkills(dedupeSkills(result.skills))
+      setCatalogTotal(result.total ?? catalogTotal)
+      setCatalogBatchPage(nextPage)
+      setPage(nextPage)
+    } catch (error) {
+      if (requestId === catalogRequestRef.current) setError(formatError(error))
+    } finally {
+      if (requestId === catalogRequestRef.current) setRefreshing(false)
+    }
   }
 
   function scheduleSourcePreload(source: MarketSource): void {
@@ -510,8 +557,10 @@ export function SkillMarket(): React.JSX.Element {
     setSelectedSourceId(source.id)
     setActiveCategory('all')
     setError(null)
-    const local = catalogMemoryRef.current.get(source.id)
+    const local = remoteMarketKinds.has(source.kind) ? undefined : catalogMemoryRef.current.get(source.id)
     setSkills(local?.skills || [])
+    setCatalogTotal(local?.total ?? local?.skills.length ?? 0)
+    setCatalogBatchPage(1)
     setLoading(!local)
     setRefreshing(false)
   }
@@ -523,18 +572,25 @@ export function SkillMarket(): React.JSX.Element {
     if (running) return running
     const request = marketSchedulerRef.current.schedule(async () => {
       try {
+        const isRemote = remoteMarketKinds.has(source.kind)
         const cached = await window.aiHelper.invoke<MarketSkillResult>('market:listCachedSkills', { sourceId: source.id })
         const cachedSkills = dedupeSkills(cached.skills)
-        if (cached.cacheHit) {
+        if (!isRemote && cached.cacheHit) {
           catalogMemoryRef.current.set(source.id, { skills: cachedSkills, cachedAt: cached.cachedAt || Date.now() })
           if (!cached.isStale) return
         }
         const result = await window.aiHelper.invoke<MarketSkillResult>('market:listSkills', {
           sourceId: source.id,
-          refresh: Boolean(cached.isStale)
+          refresh: Boolean(cached.isStale),
+          page: 1,
+          pageSize: isRemote ? remoteCatalogBatchSize : undefined
         })
         if (!result.error) {
-          catalogMemoryRef.current.set(source.id, { skills: dedupeSkills(result.skills), cachedAt: Date.now() })
+          catalogMemoryRef.current.set(source.id, {
+            skills: dedupeSkills(result.skills),
+            cachedAt: Date.now(),
+            total: result.total
+          })
         }
       } catch {
         // Idle and intent preloads are best-effort and never surface errors before selection.
@@ -651,9 +707,9 @@ export function SkillMarket(): React.JSX.Element {
             <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
             <Select.Popover>
               <ListBox aria-label={copy.sortFeatured}>
-                <ListBox.Item id="featured" textValue={copy.sortFeatured}>{copy.sortFeatured}<ListBox.ItemIndicator /></ListBox.Item>
-                <ListBox.Item id="name" textValue={copy.sortName}>{copy.sortName}<ListBox.ItemIndicator /></ListBox.Item>
-                <ListBox.Item id="source" textValue={copy.sortSource}>{copy.sortSource}<ListBox.ItemIndicator /></ListBox.Item>
+                <ListBox.Item className="market-sort-option" id="featured" textValue={copy.sortFeatured}><span>{copy.sortFeatured}</span><ListBox.ItemIndicator /></ListBox.Item>
+                <ListBox.Item className="market-sort-option" id="name" textValue={copy.sortName}><span>{copy.sortName}</span><ListBox.ItemIndicator /></ListBox.Item>
+                <ListBox.Item className="market-sort-option" id="source" textValue={copy.sortSource}><span>{copy.sortSource}</span><ListBox.ItemIndicator /></ListBox.Item>
               </ListBox>
             </Select.Popover>
           </Select>
@@ -683,7 +739,7 @@ export function SkillMarket(): React.JSX.Element {
           <strong>{selectedSource ? localizedSourceName(selectedSource.id, selectedSource.name, language) : copy.publicResults}</strong>
           <span>{selectedSource ? localizedSourceDescription(selectedSource.id, selectedSource.description, language) : copy.publicDescription}</span>
         </div>
-        <span>{marketText(copy.count, { count: visibleSkills.length })}</span>
+        <span>{marketText(copy.count, { count: effectiveTotal })}</span>
       </div>}
 
       {!loading && <main className="market-grid">
@@ -707,7 +763,7 @@ export function SkillMarket(): React.JSX.Element {
       </main>}
 
       {!loading && pageCount > 1 && (
-        <MarketPagination page={page} total={visibleSkills.length} pageSize={pageSize} copy={copy} onChange={changePage} />
+        <MarketPagination page={page} total={effectiveTotal} pageSize={pageSize} copy={copy} onChange={(next) => void changePage(next)} />
       )}
 
     </ScrollShadow>

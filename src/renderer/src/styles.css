@@ -2714,6 +2714,9 @@ select {
 .market-sort-select { width: auto; min-width: 92px; }
 .market-sort-select .select__trigger { min-height: 32px; padding-inline: 8px; border: 0; color: var(--market-muted); background: transparent; box-shadow: none; font-size: 12px; }
 .market-sort-select .select__trigger:hover { color: var(--market-ink); background: color-mix(in srgb, var(--market-muted) 8%, transparent); }
+.market-sort-option { display: grid; grid-template-columns: minmax(0, 1fr) 16px; align-items: center; column-gap: 8px; }
+.market-sort-option > span:first-child { min-width: 0; }
+.market-sort-option [data-slot='list-box-item-indicator'] { position: static; width: 14px; height: 14px; justify-self: end; }
 
 .market-message {
   min-height: 38px;
