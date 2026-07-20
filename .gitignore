@@ -5,3 +5,42 @@ release
 .DS_Store
 .eslintcache
 *.log
+
+# Local environment files. Keep sanitized templates versioned.
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.*.example
+
+# Credentials, private keys, and signing material.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+.npmrc
+.pypirc
+.netrc
+.docker/config.json
+auth.json
+credentials*.json
+service-account*.json
+secrets*.json
+secrets*.yaml
+secrets*.yml
+
+# Allow explicitly sanitized credential templates.
+!*.example.json
+!*.example.yaml
+!*.example.yml
+
+# Local provider and application data must never enter the repository.
+.cc-switch/
+.sookool-agent-helper/
