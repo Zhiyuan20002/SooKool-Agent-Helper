@@ -5,6 +5,17 @@ directories:
   buildResources: build
   output: release
 
+electronLanguages:
+  - en
+  - zh_CN
+  - zh-HK
+  - ja
+  - fr
+  - ko
+  - es
+  - pt_BR
+  - ar
+
 mac:
   icon: icon.icns
   category: public.app-category.developer-tools
@@ -14,7 +25,7 @@ mac:
     CFBundleLocalizations:
       - en
       - zh-Hans
-      - zh-Hant
+      - zh-HK
       - ja
       - fr
       - ko
@@ -40,8 +51,8 @@ extraResources:
     to: en.lproj
   - from: build/zh-Hans.lproj
     to: zh-Hans.lproj
-  - from: build/zh-Hant.lproj
-    to: zh-Hant.lproj
+  - from: build/zh-HK.lproj
+    to: zh-HK.lproj
   - from: build/ja.lproj
     to: ja.lproj
   - from: build/fr.lproj

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/sookool-app-icon-preview.png" width="112" alt="Ícone do SooKool Agent Helper" />
+  <img src="../../resources/sookool-app-icon-preview.png" width="112" alt="Ícone do SooKool Agent Helper" />
 
   <h1>SooKool Agent Helper</h1>
 
@@ -9,14 +9,14 @@
     <a href="https://www.electronjs.org/"><img alt="Electron" src="https://img.shields.io/badge/Electron-desktop-47848F?logo=electron&logoColor=white" /></a>
     <a href="https://react.dev/"><img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" /></a>
     <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" /></a>
-    <a href="LICENSE"><img alt="Licença MIT" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
+    <a href="../../LICENSE"><img alt="Licença MIT" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
   </p>
 </div>
 
 <div align="center">
-  <a href="README.md">English</a> ·
+  <a href="../../README.md">English</a> ·
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.zh-TW.md">繁體中文</a> ·
+  <a href="README.zh-HK.md">繁體中文（香港）</a> ·
   <a href="README.ja.md">日本語</a> ·
   <a href="README.fr.md">Français</a> ·
   <a href="README.ko.md">한국어</a> ·
@@ -39,14 +39,14 @@ O aplicativo é focado no gerenciamento local de Agent Skills. Ele exibe apenas 
 - **Marketplace de Skills**: pesquise, visualize e instale fontes oficiais, selecionadas e da comunidade.
 - **Descoberta flexível**: registre projetos, adicione locais de varredura e crie regras personalizadas de diretório.
 - **Proteções locais**: revele e copie caminhos, receba alertas de conteúdo arriscado e mantenha backups ao excluir Skills.
-- **Interface multilíngue**: inglês, chinês simplificado e tradicional, japonês, francês, coreano, espanhol, português do Brasil e árabe.
+- **Interface multilíngue**: inglês, chinês simplificado e tradicional de Hong Kong, japonês, francês, coreano, espanhol, português do Brasil e árabe.
 
 ## Capturas de tela
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/skill-library.png" alt="Biblioteca de Skills" /></td>
-    <td width="50%"><img src="docs/images/skill-market.png" alt="Marketplace de Skills" /></td>
+    <td width="50%"><img src="../images/skill-library.png" alt="Biblioteca de Skills" /></td>
+    <td width="50%"><img src="../images/skill-market.png" alt="Marketplace de Skills" /></td>
   </tr>
   <tr>
     <td align="center"><strong>Biblioteca de Skills</strong></td>
@@ -116,4 +116,4 @@ Issues e Pull Requests são bem-vindos. Para alterações de código:
 
 ## Licença
 
-O SooKool Agent Helper é distribuído sob a [licença MIT](LICENSE).
+O SooKool Agent Helper é distribuído sob a [licença MIT](../../LICENSE).

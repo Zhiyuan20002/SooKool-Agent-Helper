@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/sookool-app-icon-preview.png" width="112" alt="أيقونة SooKool Agent Helper" />
+  <img src="../../resources/sookool-app-icon-preview.png" width="112" alt="أيقونة SooKool Agent Helper" />
 
   <h1>SooKool Agent Helper</h1>
 
@@ -9,14 +9,14 @@
     <a href="https://www.electronjs.org/"><img alt="Electron" src="https://img.shields.io/badge/Electron-desktop-47848F?logo=electron&logoColor=white" /></a>
     <a href="https://react.dev/"><img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" /></a>
     <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" /></a>
-    <a href="LICENSE"><img alt="ترخيص MIT" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
+    <a href="../../LICENSE"><img alt="ترخيص MIT" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
   </p>
 </div>
 
 <div align="center">
-  <a href="README.md">English</a> ·
+  <a href="../../README.md">English</a> ·
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.zh-TW.md">繁體中文</a> ·
+  <a href="README.zh-HK.md">繁體中文（香港）</a> ·
   <a href="README.ja.md">日本語</a> ·
   <a href="README.fr.md">Français</a> ·
   <a href="README.ko.md">한국어</a> ·
@@ -39,14 +39,14 @@
 - **سوق المهارات**: ابحث وعاين وثبّت من المصادر الرسمية والمنتقاة ومصادر المجتمع في مكان واحد.
 - **اكتشاف مرن**: سجّل المشاريع وأضف مواقع المسح وأنشئ قواعد مخصصة لمجلدات التطبيقات.
 - **حماية محلية**: اعرض المسارات وانسخها، واحصل على تنبيهات للمحتوى الخطر، واحتفظ بنسخ احتياطية عند حذف المهارات.
-- **واجهة متعددة اللغات**: الإنجليزية والصينية المبسطة والتقليدية واليابانية والفرنسية والكورية والإسبانية والبرتغالية البرازيلية والعربية.
+- **واجهة متعددة اللغات**: الإنجليزية والصينية المبسطة والتقليدية في هونغ كونغ واليابانية والفرنسية والكورية والإسبانية والبرتغالية البرازيلية والعربية.
 
 ## لقطات الشاشة
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/skill-library.png" alt="مكتبة المهارات" /></td>
-    <td width="50%"><img src="docs/images/skill-market.png" alt="سوق المهارات" /></td>
+    <td width="50%"><img src="../images/skill-library.png" alt="مكتبة المهارات" /></td>
+    <td width="50%"><img src="../images/skill-market.png" alt="سوق المهارات" /></td>
   </tr>
   <tr>
     <td align="center"><strong>مكتبة المهارات</strong></td>
@@ -116,4 +116,4 @@ scripts/        التحقق من البناء واختبارات أداء ال�
 
 ## الترخيص
 
-يصدر SooKool Agent Helper بموجب [ترخيص MIT](LICENSE).
+يصدر SooKool Agent Helper بموجب [ترخيص MIT](../../LICENSE).

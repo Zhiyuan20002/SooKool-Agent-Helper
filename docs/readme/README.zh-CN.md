@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/sookool-app-icon-preview.png" width="112" alt="SooKool Agent Helper 图标" />
+  <img src="../../resources/sookool-app-icon-preview.png" width="112" alt="SooKool Agent Helper 图标" />
 
   <h1>SooKool Agent Helper</h1>
 
@@ -9,14 +9,14 @@
     <a href="https://www.electronjs.org/"><img alt="Electron" src="https://img.shields.io/badge/Electron-desktop-47848F?logo=electron&logoColor=white" /></a>
     <a href="https://react.dev/"><img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" /></a>
     <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" /></a>
-    <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
+    <a href="../../LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
   </p>
 </div>
 
 <div align="center">
-  <a href="README.md">English</a> ·
+  <a href="../../README.md">English</a> ·
   <strong>简体中文</strong> ·
-  <a href="README.zh-TW.md">繁體中文</a> ·
+  <a href="README.zh-HK.md">繁體中文（香港）</a> ·
   <a href="README.ja.md">日本語</a> ·
   <a href="README.fr.md">Français</a> ·
   <a href="README.ko.md">한국어</a> ·
@@ -39,14 +39,14 @@
 - **聚合技能市场**：在一个界面中搜索、预览和安装官方、精选及社区来源的技能。
 - **灵活发现**：登记项目、补充扫描位置，并添加自定义应用目录规则。
 - **本地安全措施**：定位和复制路径、提示高风险内容，并在删除 Skill 时保留备份。
-- **多语言界面**：英语、简体中文、繁体中文、日语、法语、韩语、西班牙语、巴西葡萄牙语和阿拉伯语。
+- **多语言界面**：英语、简体中文、繁体中文（香港）、日语、法语、韩语、西班牙语、巴西葡萄牙语和阿拉伯语。
 
 ## 软件截图
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/skill-library.png" alt="技能库" /></td>
-    <td width="50%"><img src="docs/images/skill-market.png" alt="技能市场" /></td>
+    <td width="50%"><img src="../images/skill-library.png" alt="技能库" /></td>
+    <td width="50%"><img src="../images/skill-market.png" alt="技能市场" /></td>
   </tr>
   <tr>
     <td align="center"><strong>技能库</strong></td>
@@ -116,4 +116,4 @@ SooKool Agent Helper 只管理自动检测到或由你明确配置的 Skill 位�
 
 ## 许可证
 
-SooKool Agent Helper 使用 [MIT License](LICENSE)。
+SooKool Agent Helper 使用 [MIT License](../../LICENSE)。

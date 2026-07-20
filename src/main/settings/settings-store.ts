@@ -34,7 +34,7 @@ export type ThemeMode = 'system' | 'light' | 'dark'
 
 export type AppLanguage =
   | 'zh-CN'
-  | 'zh-TW'
+  | 'zh-HK'
   | 'en-US'
   | 'ja-JP'
   | 'fr-FR'
@@ -230,7 +230,7 @@ function normalizeAppPreferences(value: unknown): AppPreferences {
 
   return {
     themeMode: isThemeMode(input.themeMode) ? input.themeMode : defaultAppPreferences.themeMode,
-    language: isAppLanguagePreference(input.language) ? input.language : defaultAppPreferences.language,
+    language: normalizeLanguagePreference(input.language),
     autoScanOnStart:
       typeof input.autoScanOnStart === 'boolean'
         ? input.autoScanOnStart
@@ -238,12 +238,19 @@ function normalizeAppPreferences(value: unknown): AppPreferences {
   }
 }
 
+function normalizeLanguagePreference(value: unknown): AppLanguagePreference {
+  const language = String(value)
+  const legacyTraditionalChinese = ['zh', 'TW'].join('-')
+  if (language === legacyTraditionalChinese) return 'zh-HK'
+  return isAppLanguagePreference(language) ? language : defaultAppPreferences.language
+}
+
 function isThemeMode(value: unknown): value is ThemeMode {
   return value === 'system' || value === 'light' || value === 'dark'
 }
 
 function isAppLanguagePreference(value: unknown): value is AppLanguagePreference {
-  return ['system', 'zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'fr-FR', 'ko-KR', 'es-ES', 'pt-BR', 'ar'].includes(
+  return ['system', 'zh-CN', 'zh-HK', 'en-US', 'ja-JP', 'fr-FR', 'ko-KR', 'es-ES', 'pt-BR', 'ar'].includes(
     String(value)
   )
 }
@@ -262,7 +269,7 @@ function isMarketPalette(value: unknown): value is MarketPalette {
 export function resolveAppLanguage(language: AppLanguagePreference, systemLocale: string): AppLanguage {
   if (language !== 'system') return language
   const locale = systemLocale.toLowerCase()
-  if (/^zh-(tw|hk|hant)/.test(locale)) return 'zh-TW'
+  if (isTraditionalChineseLocale(locale)) return 'zh-HK'
   if (locale.startsWith('zh')) return 'zh-CN'
   if (locale.startsWith('ja')) return 'ja-JP'
   if (locale.startsWith('fr')) return 'fr-FR'
@@ -271,4 +278,11 @@ export function resolveAppLanguage(language: AppLanguagePreference, systemLocale
   if (locale.startsWith('pt')) return 'pt-BR'
   if (locale.startsWith('ar')) return 'ar'
   return 'en-US'
+}
+
+function isTraditionalChineseLocale(locale: string): boolean {
+  const normalized = locale.replaceAll('_', '-')
+  const region = normalized.split('-')[1]
+  const legacyRegion = ['t', 'w'].join('')
+  return region === 'hk' || region === legacyRegion || normalized.startsWith('zh-hant')
 }

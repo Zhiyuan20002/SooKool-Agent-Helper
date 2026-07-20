@@ -1271,7 +1271,7 @@ function SettingsView({ scope }: { scope: 'general' | 'skills' }): React.JSX.Ele
                     items={[
                       { id: 'system', label: t('settings.language.system') },
                       { id: 'zh-CN', label: t('settings.language.zh') },
-                      { id: 'zh-TW', label: t('settings.language.zhTW') },
+                      { id: 'zh-HK', label: t('settings.language.zhHK') },
                       { id: 'en-US', label: t('settings.language.en') },
                       { id: 'ja-JP', label: t('settings.language.ja') },
                       { id: 'fr-FR', label: t('settings.language.fr') },

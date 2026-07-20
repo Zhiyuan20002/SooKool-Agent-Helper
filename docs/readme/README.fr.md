@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/sookool-app-icon-preview.png" width="112" alt="Icône de SooKool Agent Helper" />
+  <img src="../../resources/sookool-app-icon-preview.png" width="112" alt="Icône de SooKool Agent Helper" />
 
   <h1>SooKool Agent Helper</h1>
 
@@ -9,14 +9,14 @@
     <a href="https://www.electronjs.org/"><img alt="Electron" src="https://img.shields.io/badge/Electron-desktop-47848F?logo=electron&logoColor=white" /></a>
     <a href="https://react.dev/"><img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" /></a>
     <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" /></a>
-    <a href="LICENSE"><img alt="Licence MIT" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
+    <a href="../../LICENSE"><img alt="Licence MIT" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
   </p>
 </div>
 
 <div align="center">
-  <a href="README.md">English</a> ·
+  <a href="../../README.md">English</a> ·
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.zh-TW.md">繁體中文</a> ·
+  <a href="README.zh-HK.md">繁體中文（香港）</a> ·
   <a href="README.ja.md">日本語</a> ·
   <strong>Français</strong> ·
   <a href="README.ko.md">한국어</a> ·
@@ -45,8 +45,8 @@ L'application se concentre sur la gestion locale des Agent Skills. Elle n'affich
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/skill-library.png" alt="Bibliothèque de Skills" /></td>
-    <td width="50%"><img src="docs/images/skill-market.png" alt="Place de marché des Skills" /></td>
+    <td width="50%"><img src="../images/skill-library.png" alt="Bibliothèque de Skills" /></td>
+    <td width="50%"><img src="../images/skill-market.png" alt="Place de marché des Skills" /></td>
   </tr>
   <tr>
     <td align="center"><strong>Bibliothèque de Skills</strong></td>
@@ -116,4 +116,4 @@ Les Issues et Pull Requests sont bienvenues. Pour modifier le code :
 
 ## Licence
 
-SooKool Agent Helper est distribué sous [licence MIT](LICENSE).
+SooKool Agent Helper est distribué sous [licence MIT](../../LICENSE).

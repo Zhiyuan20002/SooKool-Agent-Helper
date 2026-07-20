@@ -2,7 +2,7 @@ export type ThemeMode = 'system' | 'light' | 'dark'
 
 export type AppLanguage =
   | 'zh-CN'
-  | 'zh-TW'
+  | 'zh-HK'
   | 'en-US'
   | 'ja-JP'
   | 'fr-FR'
@@ -79,7 +79,7 @@ export type TranslationKey =
   | 'settings.language'
   | 'settings.language.system'
   | 'settings.language.zh'
-  | 'settings.language.zhTW'
+  | 'settings.language.zhHK'
   | 'settings.language.en'
   | 'settings.language.ja'
   | 'settings.language.fr'
@@ -298,7 +298,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'settings.language': '语言',
     'settings.language.system': '跟随系统',
     'settings.language.zh': '简体中文',
-    'settings.language.zhTW': '繁體中文',
+    'settings.language.zhHK': '繁體中文（香港）',
     'settings.language.en': 'English',
     'settings.language.ja': '日本語',
     'settings.language.fr': 'Français',
@@ -514,7 +514,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'settings.language': 'Language',
     'settings.language.system': 'Follow system',
     'settings.language.zh': '简体中文',
-    'settings.language.zhTW': '繁體中文',
+    'settings.language.zhHK': '繁體中文（香港）',
     'settings.language.en': 'English',
     'settings.language.ja': '日本語',
     'settings.language.fr': 'Français',
@@ -703,27 +703,27 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'market.commandOutput': 'Last command output',
     'market.noOutput': 'No output yet'
   },
-  'zh-TW': {
+  'zh-HK': {
     'app.loading': '正在掃描技能庫…',
     'app.title': 'SooKool 智能體助手',
     'app.subtitle': '智能體助手',
     'nav.local': '技能庫',
-    'nav.market': '技能市集',
+    'nav.market': '技能市場',
     'nav.skillSettings': '技能設定',
     'nav.settings': '設定',
     'sidebar.expand': '展開側邊欄',
-    'sidebar.collapse': '收合側邊欄',
+    'sidebar.collapse': '收起側邊欄',
     'settings.title': '設定',
-    'settings.description': '管理應用程式外觀、語言與資源使用。',
+    'settings.description': '管理應用程式外觀、語言及資源使用情況。',
     'settings.skill.title': '技能設定',
-    'settings.skill.description': '管理技能目錄與刪除備份。',
+    'settings.skill.description': '管理技能目錄及已刪除項目的備份。',
     'settings.addSkillRoot': '新增技能目錄',
     'settings.tabs.general': '一般',
     'settings.tabs.resources': '資源',
     'settings.tabs.directories': '技能目錄',
     'settings.tabs.backups': '備份',
     'settings.general.title': '一般設定',
-    'settings.general.description': '調整外觀、語言與啟動行為。',
+    'settings.general.description': '調整外觀、語言及啟動設定。',
     'settings.appearance': '外觀',
     'settings.theme.system': '跟隨系統',
     'settings.theme.light': '淺色',
@@ -731,9 +731,9 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'settings.language': '語言',
     'settings.language.system': '跟隨系統',
     'settings.autoScan': '啟動時自動掃描',
-    'settings.autoScan.description': '開啟應用程式時重新整理本機 Skill 與目錄狀態。',
+    'settings.autoScan.description': '開啟應用程式時更新本地 Skill 及目錄狀態。',
     'settings.resources.title': '資源使用',
-    'settings.resources.refresh': '重新整理資源資訊',
+    'settings.resources.refresh': '更新資源資料',
     'settings.directories.title': '技能目錄',
     'settings.backups.title': '已刪除的備份',
     'settings.backups.empty': '尚無備份記錄',
@@ -760,34 +760,34 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'skills.copyPath': '複製技能目錄路徑',
     'skills.apply.title': '轉移技能',
     'skills.apply.heading': '轉移至其他應用程式',
-    'skills.apply.description': '選擇要接收目前 Skill 的應用程式。',
+    'skills.apply.description': '選擇要接收現時 Skill 的應用程式。',
     'skills.apply.selected': '已選擇 {count} 個應用程式',
     'skills.apply.close': '關閉',
     'skills.apply.add': '轉移至選取的應用程式',
     'skills.apply.remove': '從選取的應用程式移除',
     'discovery.quickScan': '快速掃描', 'discovery.deepScan': '深度掃描', 'discovery.cancel': '停止掃描',
-    'discovery.scanning': '正在探索專案', 'discovery.ready': '專案索引已就緒', 'discovery.found': '已找到 {count} 個專案',
+    'discovery.scanning': '正在探索項目', 'discovery.ready': '項目索引已準備好', 'discovery.found': '已找到 {count} 個項目',
     'discovery.checked': '已檢查 {count} 個目錄', 'discovery.lastScan': '上次掃描：{time}',
-    'discovery.scanLocations': '額外掃描位置', 'discovery.scanLocationsDescription': '新增開發目錄、外接磁碟或其他專案位置。',
+    'discovery.scanLocations': '額外掃描位置', 'discovery.scanLocationsDescription': '新增開發目錄、外置磁碟或其他項目位置。',
     'discovery.addLocation': '新增位置', 'discovery.removeLocation': '移除掃描位置',
-    'discovery.ignoreProject': '忽略自動專案', 'discovery.ignoreProjectConfirm': '忽略這個自動探索的專案？之後掃描將不再顯示。',
+    'discovery.ignoreProject': '忽略自動項目', 'discovery.ignoreProjectConfirm': '要忽略這個自動探索的項目嗎？之後掃描將不再顯示。',
     'command.done': '執行完成',
     'command.failed': '執行失敗',
-    'market.title': '技能市集',
-    'market.importLocal': '匯入本機技能',
+    'market.title': '技能市場',
+    'market.importLocal': '匯入本地技能',
     'market.addSource': '新增來源',
-    'market.searchMarket': '搜尋市集',
+    'market.searchMarket': '搜尋市場',
     'market.search': '搜尋',
     'market.refresh': '重新整理來源',
     'market.install': '安裝',
     'market.reinstall': '重新安裝',
     'market.installed': '已安裝',
-    'market.removeSource': '刪除市集來源',
-    'skills.scope.system': '系統技能', 'skills.scope.project': '專案技能', 'skills.tree.systemDirectory': '應用系統目錄', 'skills.tree.projectDirectory': '專案目錄', 'skills.tree.application': '應用程式',
-    'topology.applicationRules': '應用規則', 'topology.projectDirectories': '專案目錄', 'topology.byApplication': '按應用', 'topology.byProject': '按專案', 'topology.addApplicationRule': '新增應用規則', 'topology.addProjectDirectory': '新增專案目錄',
-    'topology.applicationDescription': '定義每個應用的系統技能目錄和專案內相對目錄。', 'topology.applicationName': '應用名稱', 'topology.systemSkillPath': '系統技能目錄，例如 ~/.my-agent/skills', 'topology.projectSkillPath': '專案技能相對路徑，例如 .my-agent/skills',
-    'topology.cancel': '取消', 'topology.saveRule': '儲存規則', 'topology.systemDirectory': '系統目錄', 'topology.projectPath': '專案路徑', 'topology.builtin': '內建規則', 'topology.removeRule': '刪除規則', 'topology.unclassified': '待分類目錄',
-    'topology.projectDescription': '登記專案根目錄後，應用規則會自動解析專案技能。', 'topology.nestedProject': '巢狀專案', 'topology.rootProject': '根專案', 'topology.removeRegistration': '移除登記', 'topology.removeProjectConfirm': '只移除專案登記，不會刪除任何檔案。繼續嗎？', 'topology.noProjects': '尚未新增專案目錄。',
+    'market.removeSource': '刪除市場來源',
+    'skills.scope.system': '系統技能', 'skills.scope.project': '項目技能', 'skills.tree.systemDirectory': '應用系統目錄', 'skills.tree.projectDirectory': '項目目錄', 'skills.tree.application': '應用程式',
+    'topology.applicationRules': '應用規則', 'topology.projectDirectories': '項目目錄', 'topology.byApplication': '按應用', 'topology.byProject': '按項目', 'topology.addApplicationRule': '新增應用規則', 'topology.addProjectDirectory': '新增項目目錄',
+    'topology.applicationDescription': '定義每個應用的系統技能目錄及項目內相對目錄。', 'topology.applicationName': '應用名稱', 'topology.systemSkillPath': '系統技能目錄，例如 ~/.my-agent/skills', 'topology.projectSkillPath': '項目技能相對路徑，例如 .my-agent/skills',
+    'topology.cancel': '取消', 'topology.saveRule': '儲存規則', 'topology.systemDirectory': '系統目錄', 'topology.projectPath': '項目路徑', 'topology.builtin': '內置規則', 'topology.removeRule': '刪除規則', 'topology.unclassified': '待分類目錄',
+    'topology.projectDescription': '登記項目根目錄後，應用規則會自動解析項目技能。', 'topology.nestedProject': '嵌套項目', 'topology.rootProject': '根項目', 'topology.removeRegistration': '移除登記', 'topology.removeProjectConfirm': '只移除項目登記，不會刪除任何檔案。繼續嗎？', 'topology.noProjects': '尚未新增項目目錄。',
     'root.shared': '共享 Skill 目錄'
   },
   'ja-JP': {
@@ -1329,7 +1329,7 @@ export function translate(
 export function resolveAppLanguage(language: AppLanguagePreference, systemLocale?: string): AppLanguage {
   if (language !== 'system') return language
   const locale = (systemLocale || (typeof navigator !== 'undefined' ? navigator.language : 'en-US')).toLowerCase()
-  if (locale.startsWith('zh-tw') || locale.startsWith('zh-hk') || locale.startsWith('zh-hant')) return 'zh-TW'
+  if (isTraditionalChineseLocale(locale)) return 'zh-HK'
   if (locale.startsWith('zh')) return 'zh-CN'
   if (locale.startsWith('ja')) return 'ja-JP'
   if (locale.startsWith('fr')) return 'fr-FR'
@@ -1338,4 +1338,11 @@ export function resolveAppLanguage(language: AppLanguagePreference, systemLocale
   if (locale.startsWith('pt')) return 'pt-BR'
   if (locale.startsWith('ar')) return 'ar'
   return 'en-US'
+}
+
+function isTraditionalChineseLocale(locale: string): boolean {
+  const normalized = locale.replaceAll('_', '-')
+  const region = normalized.split('-')[1]
+  const legacyRegion = ['t', 'w'].join('')
+  return region === 'hk' || region === legacyRegion || normalized.startsWith('zh-hant')
 }

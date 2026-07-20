@@ -101,15 +101,15 @@ const labels: Record<AppLanguage, MenuLabels> = {
     minimize: 'Minimize',
     help: 'Help'
   },
-  'zh-TW': {
+  'zh-HK': {
     app: 'SooKool 智能體助手', about: '關於 SooKool 智能體助手', services: '服務',
     hide: '隱藏 SooKool 智能體助手', hideOthers: '隱藏其他應用程式', showAll: '全部顯示',
-    quit: '結束 SooKool 智能體助手', file: '檔案', local: '技能庫', market: '技能市集',
+    quit: '結束 SooKool 智能體助手', file: '檔案', local: '技能庫', market: '技能市場',
     settings: '設定…', close: '關閉視窗', edit: '編輯', undo: '還原', redo: '重做',
     cut: '剪下', copy: '複製', paste: '貼上', selectAll: '全選', view: '顯示',
     reload: '重新載入介面', forceReload: '強制重新載入', toggleDevTools: '開發者工具',
     zoom: '縮放', zoomReset: '實際大小', zoomIn: '放大', zoomOut: '縮小',
-    window: '視窗', minimize: '最小化', help: '輔助說明'
+    window: '視窗', minimize: '最小化', help: '幫助'
   },
   'ja-JP': {
     app: 'SooKool エージェントアシスタント', about: 'SooKool エージェントアシスタントについて',

@@ -3,7 +3,7 @@ import test from 'node:test'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SettingsStore } from './settings-store.ts'
+import { resolveAppLanguage, SettingsStore } from './settings-store.ts'
 
 test('preserves legacy skill roots as unclassified locations during schema migration', () => {
   const directory = mkdtempSync(join(tmpdir(), 'sookool-settings-'))
@@ -60,4 +60,20 @@ test('stores unique additional project scan roots', () => {
   settings.saveProjectScanRoots(['/Volumes/Work', '/Volumes/Work', '/workspace'])
 
   assert.deepEqual(settings.getProjectScanRoots(), ['/Volumes/Work', '/workspace'])
+})
+
+test('migrates the legacy Traditional Chinese preference to Hong Kong Chinese', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'sookool-settings-'))
+  const path = join(directory, 'settings.json')
+  const legacyLanguage = ['zh', 'TW'].join('-')
+  writeFileSync(path, JSON.stringify({ appPreferences: { language: legacyLanguage } }))
+
+  const settings = new SettingsStore(path)
+  assert.equal(settings.getAppPreferences().language, 'zh-HK')
+})
+
+test('resolves Traditional Chinese system locales to Hong Kong Chinese', () => {
+  assert.equal(resolveAppLanguage('system', 'zh-HK'), 'zh-HK')
+  assert.equal(resolveAppLanguage('system', 'zh-Hant'), 'zh-HK')
+  assert.equal(resolveAppLanguage('system', ['zh', 'TW'].join('-')), 'zh-HK')
 })

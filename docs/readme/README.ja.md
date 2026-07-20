@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/sookool-app-icon-preview.png" width="112" alt="SooKool Agent Helper アイコン" />
+  <img src="../../resources/sookool-app-icon-preview.png" width="112" alt="SooKool Agent Helper アイコン" />
 
   <h1>SooKool Agent Helper</h1>
 
@@ -9,14 +9,14 @@
     <a href="https://www.electronjs.org/"><img alt="Electron" src="https://img.shields.io/badge/Electron-desktop-47848F?logo=electron&logoColor=white" /></a>
     <a href="https://react.dev/"><img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" /></a>
     <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" /></a>
-    <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
+    <a href="../../LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
   </p>
 </div>
 
 <div align="center">
-  <a href="README.md">English</a> ·
+  <a href="../../README.md">English</a> ·
   <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.zh-TW.md">繁體中文</a> ·
+  <a href="README.zh-HK.md">繁體中文（香港）</a> ·
   <strong>日本語</strong> ·
   <a href="README.fr.md">Français</a> ·
   <a href="README.ko.md">한국어</a> ·
@@ -39,14 +39,14 @@ Agent アプリケーションは、Skills をそれぞれ異なるシステム�
 - **Skill マーケットプレイス**：公式、厳選、コミュニティのソースを横断して検索、確認、インストールできます。
 - **柔軟な検出**：プロジェクト、スキャン場所、カスタムアプリディレクトリ規則を追加できます。
 - **ローカル保護**：パスの表示とコピー、危険な内容の警告、削除時のバックアップに対応します。
-- **多言語 UI**：英語、簡体字中国語、繁体字中国語、日本語、フランス語、韓国語、スペイン語、ブラジルポルトガル語、アラビア語。
+- **多言語 UI**：英語、簡体字中国語、繁体字中国語（香港）、日本語、フランス語、韓国語、スペイン語、ブラジルポルトガル語、アラビア語。
 
 ## スクリーンショット
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/skill-library.png" alt="Skill ライブラリ" /></td>
-    <td width="50%"><img src="docs/images/skill-market.png" alt="Skill マーケットプレイス" /></td>
+    <td width="50%"><img src="../images/skill-library.png" alt="Skill ライブラリ" /></td>
+    <td width="50%"><img src="../images/skill-market.png" alt="Skill マーケットプレイス" /></td>
   </tr>
   <tr>
     <td align="center"><strong>Skill ライブラリ</strong></td>
@@ -116,4 +116,4 @@ Issue と Pull Request を歓迎します。コードを変更する場合：
 
 ## ライセンス
 
-SooKool Agent Helper は [MIT License](LICENSE) で公開されています。
+SooKool Agent Helper は [MIT License](../../LICENSE) で公開されています。

@@ -15,14 +15,14 @@
 
 <div align="center">
   <strong>English</strong> ·
-  <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.zh-TW.md">繁體中文</a> ·
-  <a href="README.ja.md">日本語</a> ·
-  <a href="README.fr.md">Français</a> ·
-  <a href="README.ko.md">한국어</a> ·
-  <a href="README.es.md">Español</a> ·
-  <a href="README.pt-BR.md">Português</a> ·
-  <a href="README.ar.md">العربية</a>
+  <a href="docs/readme/README.zh-CN.md">简体中文</a> ·
+  <a href="docs/readme/README.zh-HK.md">繁體中文（香港）</a> ·
+  <a href="docs/readme/README.ja.md">日本語</a> ·
+  <a href="docs/readme/README.fr.md">Français</a> ·
+  <a href="docs/readme/README.ko.md">한국어</a> ·
+  <a href="docs/readme/README.es.md">Español</a> ·
+  <a href="docs/readme/README.pt-BR.md">Português</a> ·
+  <a href="docs/readme/README.ar.md">العربية</a>
 </div>
 
 ## Overview
@@ -39,7 +39,7 @@ The app is focused on Agent Skill management. It runs locally, detects only rele
 - **Skill marketplace** — search, preview, and install from official, curated, and community sources in one place.
 - **Flexible discovery** — register projects, add scan locations, and define custom application directory rules.
 - **Local safeguards** — reveal paths, copy locations, flag risky package contents, and keep backups when deleting Skills.
-- **Multilingual UI** — English, Simplified Chinese, Traditional Chinese, Japanese, French, Korean, Spanish, Brazilian Portuguese, and Arabic.
+- **Multilingual UI** — English, Simplified Chinese, Traditional Chinese (Hong Kong), Japanese, French, Korean, Spanish, Brazilian Portuguese, and Arabic.
 
 ## Screenshots
 

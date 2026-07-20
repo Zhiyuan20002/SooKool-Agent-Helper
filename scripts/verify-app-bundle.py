@@ -41,7 +41,7 @@ def main() -> None:
     for locale in (
         "en.lproj",
         "zh-Hans.lproj",
-        "zh-Hant.lproj",
+        "zh-HK.lproj",
         "ja.lproj",
         "fr.lproj",
         "ko.lproj",
