@@ -13,7 +13,15 @@ import type {
 
 let removeCatalogChangedListener: (() => void) | null = null
 
-export type ViewType = 'market' | 'local' | 'skill-settings' | 'settings'
+export type ViewType =
+  | 'market'
+  | 'local'
+  | 'skill-settings'
+  | 'routing-overview'
+  | 'routing-providers'
+  | 'routing-proxy'
+  | 'routing-usage'
+  | 'settings'
 
 interface CreateSkillForm {
   rootId: string

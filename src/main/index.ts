@@ -1,16 +1,31 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, session, shell } from 'electron'
 import { join } from 'path'
+import { homedir } from 'os'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { resolveAppLanguage, SettingsStore, type AppLanguagePreference } from './settings/settings-store'
 import { SkillMarketManager } from './skills/skill-market'
 import { SkillManager } from './skills/skill-manager'
 import { getAppDisplayName, installApplicationMenu } from './app-menu'
 import { ResourceManager } from './resources/resource-manager'
+import { RoutingRepository } from './routing/routing-repository'
+import { RoutingOperationsRepository } from './routing/routing-operations'
+import { isProxyRoutingAppType, LocalRoutingService } from './routing/local-routing-service'
+import type {
+  ActivateRoutingProviderInput,
+  DeleteRoutingProviderInput,
+  RoutingProviderInput,
+  RoutingUsageQuery,
+  UpdateRoutingProxyInput
+} from '../shared/routing-types'
 
 let skillManager: SkillManager
 let skillMarketManager: SkillMarketManager
 let settingsStore: SettingsStore
 let resourceManager: ResourceManager
+let routingRepository: RoutingRepository
+let routingOperations: RoutingOperationsRepository
+let localRoutingService: LocalRoutingService
+let routingShutdownStarted = false
 
 app.setName('SooKool Agent Helper')
 
@@ -244,6 +259,28 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle('app:clearResource', async (_event, id) => resourceManager.clear(id))
+  ipcMain.handle('routing:getSnapshot', async () => routingRepository.getSnapshot())
+  ipcMain.handle('routing:saveProvider', async (_event, input: RoutingProviderInput) =>
+    routingRepository.saveProvider(input)
+  )
+  ipcMain.handle('routing:deleteProvider', async (_event, input: DeleteRoutingProviderInput) => {
+    await routingRepository.deleteProvider(input)
+    return routingRepository.getSnapshot()
+  })
+  ipcMain.handle('routing:activateProvider', async (_event, input: ActivateRoutingProviderInput) => {
+    await routingRepository.activateProvider(input)
+    if (isProxyRoutingAppType(input.appType)) localRoutingService.refreshTakeover(input.appType)
+    return routingRepository.getSnapshot()
+  })
+  ipcMain.handle('routing:getProxySnapshot', async () => localRoutingService.getSnapshot())
+  ipcMain.handle('routing:updateProxyConfig', async (_event, input: UpdateRoutingProxyInput) =>
+    localRoutingService.updateConfig(input)
+  )
+  ipcMain.handle('routing:startProxy', async () => localRoutingService.start())
+  ipcMain.handle('routing:stopProxy', async () => localRoutingService.stop())
+  ipcMain.handle('routing:getUsage', async (_event, input?: RoutingUsageQuery) =>
+    localRoutingService.getUsage(input)
+  )
 }
 
 app.whenReady().then(() => {
@@ -269,6 +306,28 @@ app.whenReady().then(() => {
     logsPath: app.getPath('logs'),
     clearBrowserCache: () => session.defaultSession.clearCache()
   })
+  routingRepository = new RoutingRepository({
+    ccSwitchDbPath: join(homedir(), '.cc-switch', 'cc-switch.db'),
+    ccSwitchSettingsPath: join(homedir(), '.cc-switch', 'settings.json'),
+    localStorePath: join(app.getPath('userData'), 'routing', 'providers.json'),
+    livePaths: {
+      claudeSettingsPath: join(homedir(), '.claude', 'settings.json'),
+      codexAuthPath: join(homedir(), '.codex', 'auth.json'),
+      codexConfigPath: join(homedir(), '.codex', 'config.toml'),
+      geminiEnvPath: join(homedir(), '.gemini', '.env'),
+      geminiSettingsPath: join(homedir(), '.gemini', 'settings.json'),
+      backupDir: join(app.getPath('userData'), 'routing', 'backups', 'live'),
+      ccSwitchSettingsPath: join(homedir(), '.cc-switch', 'settings.json')
+    }
+  })
+  routingOperations = new RoutingOperationsRepository({
+    databasePath: join(app.getPath('userData'), 'routing', 'routing.db'),
+    ccSwitchDbPath: join(homedir(), '.cc-switch', 'cc-switch.db')
+  })
+  localRoutingService = new LocalRoutingService({
+    repository: routingRepository,
+    operations: routingOperations
+  })
   registerIpc()
   nativeTheme.on('updated', updateDockIcon)
   createWindow()
@@ -282,4 +341,15 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => skillManager?.dispose())
+app.on('before-quit', (event) => {
+  skillManager?.dispose()
+  if (!localRoutingService || routingShutdownStarted) return
+  routingShutdownStarted = true
+  event.preventDefault()
+  void localRoutingService.dispose()
+    .catch((error) => console.error('Failed to stop local routing service', error))
+    .finally(() => {
+      routingOperations.close()
+      app.quit()
+    })
+})

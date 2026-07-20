@@ -1,6 +1,17 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Spinner, useTheme } from '@heroui/react'
-import { BookText, PanelLeftClose, PanelLeftOpen, Settings, Settings2, Store } from 'lucide-react'
+import {
+  Activity,
+  BookText,
+  Gauge,
+  Network,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  Settings2,
+  Store,
+  Waypoints
+} from 'lucide-react'
 import { SkillLibrary } from '@/components/SkillLibrary'
 import { resolveAppLanguage, translate } from '@/i18n'
 import { useAppStore, type ViewType } from '@/stores/app-store'
@@ -8,7 +19,7 @@ import sookoolLogo from './assets/sookool-app-icon-ui.png'
 import sookoolLogoDark from './assets/sookool-app-icon-ui-dark.png'
 import sookoolWordmark from './assets/sookool-wordmark.png'
 
-const navItems: Array<{
+const skillNavItems: Array<{
   id: ViewType
   labelKey: Parameters<typeof translate>[1]
   icon: React.ElementType
@@ -16,6 +27,17 @@ const navItems: Array<{
   { id: 'local', labelKey: 'nav.local', icon: BookText },
   { id: 'market', labelKey: 'nav.market', icon: Store },
   { id: 'skill-settings', labelKey: 'nav.skillSettings', icon: Settings2 }
+]
+
+const routingNavItems: Array<{
+  id: ViewType
+  label: string
+  icon: React.ElementType
+}> = [
+  { id: 'routing-overview', label: '路由总览', icon: Gauge },
+  { id: 'routing-providers', label: '供应商', icon: Waypoints },
+  { id: 'routing-proxy', label: '本地路由', icon: Network },
+  { id: 'routing-usage', label: '用量统计', icon: Activity }
 ]
 
 export function App(): React.JSX.Element {
@@ -79,7 +101,8 @@ export function App(): React.JSX.Element {
           </Button>
         </div>
         <nav className="nav no-drag">
-          {navItems.map((item) => {
+          <span className="nav-section-label">技能</span>
+          {skillNavItems.map((item) => {
             const Icon = item.icon
             const label = t(item.labelKey)
             return (
@@ -94,6 +117,23 @@ export function App(): React.JSX.Element {
                 <Icon size={20} />
                 <span className="nav-label">{label}</span>
                 {item.id === 'local' && <span className="nav-count">{skills.length}</span>}
+              </Button>
+            )
+          })}
+          <span className="nav-section-label routing-section-label">模型路由</span>
+          {routingNavItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <Button
+                key={item.id}
+                className="nav-button"
+                aria-label={item.label}
+                fullWidth
+                variant={currentView === item.id ? 'tertiary' : 'ghost'}
+                onPress={() => setCurrentView(item.id)}
+              >
+                <Icon size={20} />
+                <span className="nav-label">{item.label}</span>
               </Button>
             )
           })}

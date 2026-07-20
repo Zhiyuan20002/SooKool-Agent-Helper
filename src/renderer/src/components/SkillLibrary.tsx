@@ -70,6 +70,7 @@ import type {
 } from '@/types/skills'
 import { SkillMarket } from './SkillEcosystem'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { ModelRouting } from './ModelRouting'
 
 const skillMarkdownPath = 'SKILL.md'
 
@@ -82,6 +83,7 @@ function useTranslator(): (
 }
 
 export function SkillLibrary({ view }: { view: ViewType }): React.JSX.Element {
+  if (view.startsWith('routing-')) return <ModelRouting view={view} />
   if (view === 'market') return <SkillMarket />
   if (view === 'settings') return <SettingsView scope="general" />
   if (view === 'skill-settings') return <SettingsView scope="skills" />
