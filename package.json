@@ -1,6 +1,6 @@
 {
   "name": "sookool-agent-helper",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "SooKool Agent Helper - local agent assistant for skills and workflows",
   "main": "./out/main/index.js",
   "author": "SooKool",
