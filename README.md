@@ -1,42 +1,73 @@
-# SooKool Agent Helper
+<div align="center">
+  <img src="resources/sookool-app-icon-preview.png" width="112" alt="SooKool Agent Helper icon" />
 
-> 一个专注于 Agent Skills 的本地桌面管理工具：发现、整理、预览、转移和安装散落在不同 AI 应用与项目中的技能。
+  <h1>SooKool Agent Helper</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-f4511e.svg)](LICENSE)
+  <p><strong>A local desktop workspace for discovering, organizing, previewing, transferring, and installing Agent Skills.</strong></p>
 
-不同 Agent 应用使用不同的技能目录，同一个 Skill 也可能同时存在于系统目录、共享目录和多个项目中。SooKool Agent Helper 把这些位置整理成统一视图，并提供技能市场，让你不必反复查找目录、复制文件或记忆每个应用的约定。
+  <p>
+    <a href="https://www.electronjs.org/"><img alt="Electron" src="https://img.shields.io/badge/Electron-desktop-47848F?logo=electron&logoColor=white" /></a>
+    <a href="https://react.dev/"><img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" /></a>
+    <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" /></a>
+    <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-F4511E.svg" /></a>
+  </p>
+</div>
 
-## 技能库
+<div align="center">
+  <strong>English</strong> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="README.zh-TW.md">繁體中文</a> ·
+  <a href="README.ja.md">日本語</a> ·
+  <a href="README.fr.md">Français</a> ·
+  <a href="README.ko.md">한국어</a> ·
+  <a href="README.es.md">Español</a> ·
+  <a href="README.pt-BR.md">Português</a> ·
+  <a href="README.ar.md">العربية</a>
+</div>
 
-![SooKool Agent Helper 技能库](docs/images/skill-library.png)
+## Overview
 
-- 自动发现已安装 Agent 应用的系统级与项目级技能目录。
-- 按应用或项目查看技能，识别多个应用共享的同一物理目录，避免重复计数。
-- 搜索 Skill，并查看 `SKILL.md`、脚本、图片及其他随附文件。
-- 在支持的 Agent 应用之间转移或移除 Skill，可选择系统范围或指定项目。
-- 支持在文件管理器中定位、复制路径，以及删除前自动备份。
-- 可登记项目、补充扫描位置，并为尚未内置的应用添加自定义目录规则。
+Agent applications store Skills in different system, shared, and project directories. SooKool Agent Helper turns those scattered locations into one coherent library and adds a unified marketplace, so you do not need to memorize directory conventions or copy packages by hand.
 
-## 技能市场
+The app is focused on Agent Skill management. It runs locally, detects only relevant applications and directories, and lets you extend its built-in rules when your tool is not listed yet.
 
-![SooKool Agent Helper 技能市场](docs/images/skill-market.png)
+## Highlights
 
-- 聚合 Anthropic、OpenAI、OpenClaw、Hermes、Vercel Labs、Hugging Face、NVIDIA 等官方或精选技能目录。
-- 接入腾讯 SkillHub、小红书 Red Skill、ModelScope Skills 和 ClawHub。
-- 支持跨市场搜索、分类与排序，并在安装前预览说明和文件内容。
-- 可将一个 Skill 同时安装到多个应用，支持系统级和项目级目标。
-- 支持添加 Git 仓库、本地目录及兼容的自定义市场源。
-- 对脚本、二进制文件和异常 `SKILL.md` 元数据给出检查提示。
+- **Unified Skill library** — browse system and project Skills by application or project without double-counting shared directories.
+- **Rich previews** — inspect `SKILL.md`, Markdown, scripts, images, text files, and package metadata before acting.
+- **Cross-application transfer** — add or remove a Skill across supported Agent applications at system or project scope.
+- **Skill marketplace** — search, preview, and install from official, curated, and community sources in one place.
+- **Flexible discovery** — register projects, add scan locations, and define custom application directory rules.
+- **Local safeguards** — reveal paths, copy locations, flag risky package contents, and keep backups when deleting Skills.
+- **Multilingual UI** — English, Simplified Chinese, Traditional Chinese, Japanese, French, Korean, Spanish, Brazilian Portuguese, and Arabic.
 
-## 应用兼容
+## Screenshots
 
-项目内置了常见 Agent 工具的目录规则，包括 Codex、Claude Code、Cursor、Gemini CLI、GitHub Copilot、OpenCode、OpenClaw、Hermes Agent、Kilo Code、Qoder、Qwen Code、Trae、Windsurf 等。只有本机检测到的应用和有效技能目录会进入主要视图；其他工具可以通过自定义规则接入。
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/skill-library.png" alt="Skill Library" /></td>
+    <td width="50%"><img src="docs/images/skill-market.png" alt="Skill Marketplace" /></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Skill Library</strong></td>
+    <td align="center"><strong>Skill Marketplace</strong></td>
+  </tr>
+</table>
 
-应用基于 Electron、React 和 TypeScript 构建，提供 macOS、Windows 与 Linux 的打包配置，并支持简体中文、繁体中文、英语、日语、法语、韩语、西班牙语、葡萄牙语和阿拉伯语界面。
+## Ecosystem support
 
-## 本地运行
+Built-in directory rules cover common Agent tools including Codex, Claude Code, Cursor, Gemini CLI, GitHub Copilot, OpenCode, OpenClaw, Hermes Agent, Kilo Code, Qoder, Qwen Code, Trae, Windsurf, and many others. Only applications and valid Skill locations detected on your machine appear in the main library. Custom rules can connect additional tools.
 
-请先安装 Node.js、npm 和 Git，然后执行：
+The marketplace includes sources from Anthropic, OpenAI, OpenClaw, Hermes, Vercel Labs, Hugging Face, NVIDIA, Tencent SkillHub, Red Skill, ModelScope Skills, and ClawHub. Git repositories, local directories, and compatible custom sources can also be added.
+
+## Getting started
+
+### Prerequisites
+
+- Node.js and npm
+- Git
+
+### Run from source
 
 ```bash
 git clone https://github.com/Zhiyuan20002/SooKool-Agent-Helper.git
@@ -45,21 +76,44 @@ npm install
 npm run dev
 ```
 
-## 开发命令
+## Development
 
-| 命令                | 用途                                   |
-| ------------------- | -------------------------------------- |
-| `npm run dev`       | 启动 Electron 开发环境                 |
-| `npm run typecheck` | 检查主进程与渲染进程的 TypeScript 类型 |
-| `npm test`          | 运行自动化测试                         |
-| `npm run build`     | 完成类型检查并生成应用构建             |
-| `npm run dist:mac`  | 打包 macOS 安装产物                    |
-| `npm run dist:win`  | 打包 Windows 安装产物                  |
+| Command             | Description                                |
+| ------------------- | ------------------------------------------ |
+| `npm run dev`       | Start the Electron development environment |
+| `npm run typecheck` | Type-check the main and renderer processes |
+| `npm test`          | Run the automated test suite               |
+| `npm run build`     | Type-check and create a production build   |
+| `npm run dist:mac`  | Package the macOS application              |
+| `npm run dist:win`  | Package the Windows application            |
 
-## 数据与安全
+The repository also contains Linux packaging configuration in `electron-builder.yml`.
 
-SooKool Agent Helper 在本地读取和管理你明确配置或检测到的 Skill 目录；访问在线技能市场时才需要网络连接。市场中的 Skill 由各自来源维护，安装带有脚本或二进制文件的 Skill 前，请先检查预览内容和来源可信度。
+## Project structure
+
+```text
+src/main/       Electron main process, Skill discovery, storage, and marketplaces
+src/preload/    Typed bridge between the main and renderer processes
+src/renderer/   React interface, state, localization, and previews
+resources/      Application icons and packaged resources
+scripts/        Build verification and marketplace benchmarks
+```
+
+## Security
+
+SooKool Agent Helper manages only the Skill locations that it detects or that you explicitly configure. Network access is required when loading online marketplaces or remote repositories. Marketplace packages are maintained by their respective sources; always review warnings, scripts, binary files, and the source itself before installation.
+
+Please report security-sensitive issues privately to the repository owner instead of publishing exploit details in a public issue.
+
+## Contributing
+
+Issues and pull requests are welcome. For code changes:
+
+1. Fork the repository and create a focused branch.
+2. Keep changes scoped and add tests where behavior changes.
+3. Run `npm run typecheck` and `npm test`.
+4. Open a pull request describing the problem, solution, and verification.
 
 ## License
 
-本项目使用 [MIT License](LICENSE)。
+SooKool Agent Helper is released under the [MIT License](LICENSE).
