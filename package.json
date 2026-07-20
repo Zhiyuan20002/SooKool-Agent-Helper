@@ -4,6 +4,7 @@
   "description": "SooKool Agent Helper - local agent assistant for skills and workflows",
   "main": "./out/main/index.js",
   "author": "SooKool",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "test": "node --experimental-strip-types --test src/main/resources/resource-manager.test.ts src/main/settings/settings-store.test.ts src/main/skills/archive-extractor.test.ts src/main/skills/market-catalog-cache.test.ts src/main/skills/market-source-loader.test.ts src/main/skills/project-discovery.test.ts src/main/skills/project-discovery-manager.test.ts src/main/skills/project-system-index.test.ts src/main/skills/skill-filesystem.test.ts src/main/skills/skill-topology.test.ts src/renderer/src/markdown-parser.test.ts src/renderer/src/market-load-utils.test.ts src/renderer/src/market-palettes.test.ts src/renderer/src/market-search-utils.test.ts src/renderer/src/skill-library-tree.test.ts",
