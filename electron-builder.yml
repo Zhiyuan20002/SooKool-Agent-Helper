@@ -5,6 +5,10 @@ directories:
   buildResources: build
   output: release
 
+files:
+  - out/**/*
+  - package.json
+
 electronLanguages:
   - en
   - zh_CN
@@ -19,6 +23,9 @@ electronLanguages:
 mac:
   icon: icon.icns
   category: public.app-category.developer-tools
+  forceCodeSigning: true
+  hardenedRuntime: true
+  notarize: true
   extendInfo:
     CFBundleDisplayName: SooKool 智能体助手
     CFBundleDevelopmentRegion: zh-Hans
