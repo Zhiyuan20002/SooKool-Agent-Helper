@@ -44,6 +44,12 @@ export interface SkillsCommandResult {
   durationMs: number
 }
 
+export interface SkillsCommandLaunchSpec {
+  executable: string
+  args: string[]
+  env: NodeJS.ProcessEnv
+}
+
 const home = homedir()
 const codexHome = process.env.CODEX_HOME?.trim() || join(home, '.codex')
 const claudeHome = process.env.CLAUDE_CONFIG_DIR?.trim() || join(home, '.claude')
@@ -212,14 +218,15 @@ export function listBuiltinApplicationRules(
 ): ApplicationRule[] {
   return agentCatalog
     .filter((entry) => {
-      const globalInstalled = entry.globalPath
-        ? existsSync(expandPath(entry.globalPath))
-        : false
+      const globalInstalled = entry.globalPath ? existsSync(expandPath(entry.globalPath)) : false
       const detected = entry.detectPaths.some((path) => existsSync(resolveDetectPath(path, cwd)))
       const projectInstalled = projects.some((project) => {
         const hasSkills = existsSync(join(project.path, entry.projectPath))
-        const detectedInProject = entry.detectPaths.some((path) =>
-          !path.startsWith('~/') && !path.startsWith('/') && existsSync(resolveDetectPath(path, project.path))
+        const detectedInProject = entry.detectPaths.some(
+          (path) =>
+            !path.startsWith('~/') &&
+            !path.startsWith('/') &&
+            existsSync(resolveDetectPath(path, project.path))
         )
         return detectedInProject || (entry.detectPaths.length === 0 && hasSkills)
       })
@@ -241,20 +248,18 @@ export function isBuiltinApplicationId(id: string): boolean {
 
 export function runSkillsCommand(
   input: SkillsCommandInput,
-  cwd = process.cwd()
+  cwd = process.cwd(),
+  skillsCliPath = join(process.cwd(), 'node_modules/skills/bin/cli.mjs')
 ): Promise<SkillsCommandResult> {
-  const args = buildSkillsArgs(input)
+  const launch = createSkillsCommandLaunchSpec(input, skillsCliPath)
+  const args = launch.args.slice(1)
   const startedAt = Date.now()
   return new Promise((resolve) => {
-    const child = spawn(
-      process.execPath,
-      [join(process.cwd(), 'node_modules/skills/bin/cli.mjs'), ...args],
-      {
-        cwd,
-        env: { ...process.env, DISABLE_TELEMETRY: '1' },
-        stdio: ['ignore', 'pipe', 'pipe']
-      }
-    )
+    const child = spawn(launch.executable, launch.args, {
+      cwd,
+      env: launch.env,
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (chunk) => {
@@ -282,6 +287,23 @@ export function runSkillsCommand(
       })
     })
   })
+}
+
+export function createSkillsCommandLaunchSpec(
+  input: SkillsCommandInput,
+  skillsCliPath: string,
+  executable = process.execPath,
+  environment: NodeJS.ProcessEnv = process.env
+): SkillsCommandLaunchSpec {
+  return {
+    executable,
+    args: [skillsCliPath, ...buildSkillsArgs(input)],
+    env: {
+      ...environment,
+      DISABLE_TELEMETRY: '1',
+      ELECTRON_RUN_AS_NODE: '1'
+    }
+  }
 }
 
 function buildSkillsArgs(input: SkillsCommandInput): string[] {

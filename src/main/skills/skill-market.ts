@@ -1,11 +1,8 @@
 import type { MarketPalette, SettingsStore, SavedMarketSource } from '../settings/settings-store'
-import { isAbsolute, relative, resolve, sep } from 'path'
+import { isAbsolute, join, relative, resolve, sep } from 'path'
 import type { SkillDetail } from './skill-types'
 import type { SkillManager } from './skill-manager'
-import {
-  runSkillsCommand,
-  type SkillsCommandResult
-} from './ecosystem'
+import { runSkillsCommand, type SkillsCommandResult } from './ecosystem'
 import type { ApplicationRule } from './skill-topology'
 import { replaceDirectoryAtomically } from './skill-filesystem'
 import {
@@ -244,12 +241,14 @@ const builtinSources: MarketSource[] = [
 
 export class SkillMarketManager {
   private loader: MarketSourceLoader
-  private installedIndexCache: { expiresAt: number; appsBySkill: Map<string, string[]> } | null = null
+  private installedIndexCache: { expiresAt: number; appsBySkill: Map<string, string[]> } | null =
+    null
 
   constructor(
     private settings: SettingsStore,
     private skillManager: SkillManager,
-    cacheRoot: string
+    cacheRoot: string,
+    private skillsCliPath = join(process.cwd(), 'node_modules/skills/bin/cli.mjs')
   ) {
     this.loader = new MarketSourceLoader(cacheRoot)
   }
@@ -273,8 +272,11 @@ export class SkillMarketManager {
   }
 
   listInstallTargets(): MarketInstallTarget[] {
-    return this.skillManager.getCatalogSnapshot().applications
-      .filter((application) => application.systemSkillPaths.length || application.projectSkillPaths.length)
+    return this.skillManager
+      .getCatalogSnapshot()
+      .applications.filter(
+        (application) => application.systemSkillPaths.length || application.projectSkillPaths.length
+      )
       .map((application) => ({
         id: application.id,
         name: application.name,
@@ -289,7 +291,11 @@ export class SkillMarketManager {
   addSource(input: MarketAddSourceInput): MarketSource[] {
     const source = input.source.trim()
     if (!source) throw new Error('市场源不能为空。')
-    if (this.listSources().some((item) => normalizeSourceKey(item.source) === normalizeSourceKey(source))) {
+    if (
+      this.listSources().some(
+        (item) => normalizeSourceKey(item.source) === normalizeSourceKey(source)
+      )
+    ) {
       throw new Error('该市场源已经存在。')
     }
 
@@ -307,8 +313,11 @@ export class SkillMarketManager {
   }
 
   removeSource(sourceId: string): MarketSource[] {
-    if (builtinSources.some((source) => source.id === sourceId)) throw new Error('内置市场源不能删除。')
-    this.settings.saveMarketSources(this.settings.getMarketSources().filter((source) => source.id !== sourceId))
+    if (builtinSources.some((source) => source.id === sourceId))
+      throw new Error('内置市场源不能删除。')
+    this.settings.saveMarketSources(
+      this.settings.getMarketSources().filter((source) => source.id !== sourceId)
+    )
     return this.listSources()
   }
 
@@ -323,7 +332,9 @@ export class SkillMarketManager {
     }
     const sources = this.settings.getMarketSources()
     if (!sources.some((source) => source.id === sourceId)) throw new Error('市场源不存在。')
-    this.settings.saveMarketSources(sources.map((source) => source.id === sourceId ? { ...source, palette } : source))
+    this.settings.saveMarketSources(
+      sources.map((source) => (source.id === sourceId ? { ...source, palette } : source))
+    )
     return this.listSources()
   }
 
@@ -407,7 +418,11 @@ export class SkillMarketManager {
     const enabledSources = this.listSources().filter((source) => source.enabled)
     const [sourceResults, publicResult] = await Promise.all([
       Promise.all(enabledSources.map((source) => this.listSkills({ sourceId: source.id }))),
-      runSkillsCommand({ command: 'find', query: input.query, owner: input.owner })
+      runSkillsCommand(
+        { command: 'find', query: input.query, owner: input.owner },
+        process.cwd(),
+        this.skillsCliPath
+      )
     ])
     const failedSourceCount = sourceResults.filter((result) => result.error).length
     const configuredSkills = sourceResults
@@ -426,7 +441,11 @@ export class SkillMarketManager {
 
   async searchPublic(input: MarketSearchInput): Promise<MarketSkillResult> {
     if (!input.query.trim()) return { skills: [], command: 'skills find', exitCode: 0, error: null }
-    const result = await runSkillsCommand({ command: 'find', query: input.query, owner: input.owner })
+    const result = await runSkillsCommand(
+      { command: 'find', query: input.query, owner: input.owner },
+      process.cwd(),
+      this.skillsCliPath
+    )
     return {
       skills: result.exitCode === 0 ? this.markInstalled(parseSearchSkills(result.stdout)) : [],
       command: result.command,
@@ -486,9 +505,10 @@ export class SkillMarketManager {
       ? this.settings.getProjects().find((project) => project.id === input.projectId)?.path
       : input.projectDirectory
     if (input.projectId && !projectDirectory) throw new Error('未找到已登记的项目目录。')
-    const sourceKind = this.listSources().find(
-      (source) => normalizeSourceKey(source.source) === normalizeSourceKey(input.source)
-    )?.kind || inferMarketSourceKind(input.source)
+    const sourceKind =
+      this.listSources().find(
+        (source) => normalizeSourceKey(source.source) === normalizeSourceKey(input.source)
+      )?.kind || inferMarketSourceKind(input.source)
     return this.installMaterializedSkill(input, selectedTargets, sourceKind, projectDirectory)
   }
 
@@ -508,11 +528,16 @@ export class SkillMarketManager {
       const targetPath = projectDirectory
         ? target.projectSkillPaths[0] && resolve(projectDirectory, target.projectSkillPaths[0])
         : target.systemSkillPaths[0]
-      if (!targetPath) throw new Error(`${target.name} 没有配置${projectDirectory ? '项目' : '系统'}技能目录。`)
+      if (!targetPath)
+        throw new Error(`${target.name} 没有配置${projectDirectory ? '项目' : '系统'}技能目录。`)
       const baseDirectory = resolve(targetPath)
       const destination = resolve(baseDirectory, destinationName)
       const relativeDestination = relative(baseDirectory, destination)
-      if (relativeDestination === '..' || relativeDestination.startsWith(`..${sep}`) || isAbsolute(relativeDestination)) {
+      if (
+        relativeDestination === '..' ||
+        relativeDestination.startsWith(`..${sep}`) ||
+        isAbsolute(relativeDestination)
+      ) {
         throw new Error('市场 Skill 安装路径超出目标应用目录。')
       }
       try {
@@ -600,26 +625,28 @@ export class SkillMarketManager {
   }
 
   private mapCatalogSkills(source: MarketSource, records: CatalogSkillRecord[]): MarketSkill[] {
-    return this.markInstalled(records.map((record) => ({
-      id: `${source.id}:${record.name}`,
-      name: record.name,
-      description: record.description,
-      author: record.author,
-      version: record.version,
-      category: record.category,
-      tags: record.tags,
-      sourceId: source.id,
-      sourceName: source.name,
-      source: source.source,
-      installSource: source.source,
-      sourcePath: record.sourcePath,
-      installed: false,
-      installedOn: [],
-      compatibleAgents: [],
-      fileCount: source.kind === 'git' || source.kind === 'local' ? record.fileCount : undefined,
-      hasScripts: record.hasScripts,
-      origin: 'source'
-    })))
+    return this.markInstalled(
+      records.map((record) => ({
+        id: `${source.id}:${record.name}`,
+        name: record.name,
+        description: record.description,
+        author: record.author,
+        version: record.version,
+        category: record.category,
+        tags: record.tags,
+        sourceId: source.id,
+        sourceName: source.name,
+        source: source.source,
+        installSource: source.source,
+        sourcePath: record.sourcePath,
+        installed: false,
+        installedOn: [],
+        compatibleAgents: [],
+        fileCount: source.kind === 'git' || source.kind === 'local' ? record.fileCount : undefined,
+        hasScripts: record.hasScripts,
+        origin: 'source'
+      }))
+    )
   }
 }
 
@@ -645,7 +672,8 @@ function parseSearchSkills(stdout: string): MarketSkill[] {
   const skills: MarketSkill[] = []
   for (let index = 0; index < lines.length; index += 1) {
     const trimmed = lines[index].trim()
-    if (!trimmed || trimmed.startsWith('Install with') || trimmed.startsWith('No skills found')) continue
+    if (!trimmed || trimmed.startsWith('Install with') || trimmed.startsWith('No skills found'))
+      continue
     const token = trimmed.split(/\s+/)[0]
     const separator = token.lastIndexOf('@')
     if (separator <= 0) continue
@@ -675,8 +703,14 @@ function parseSearchSkills(stdout: string): MarketSkill[] {
 }
 
 function marketSkillMatchesQuery(skill: MarketSkill, query: string): boolean {
-  return [skill.name, skill.description, skill.author, skill.category, skill.sourceName, ...skill.tags]
-    .some((value) => value.toLowerCase().includes(query))
+  return [
+    skill.name,
+    skill.description,
+    skill.author,
+    skill.category,
+    skill.sourceName,
+    ...skill.tags
+  ].some((value) => value.toLowerCase().includes(query))
 }
 
 function dedupeMarketSkills(skills: MarketSkill[]): MarketSkill[] {
@@ -700,7 +734,10 @@ function inferSearchCategory(name: string): string {
 }
 
 function inferSearchTags(name: string): string[] {
-  return name.split(/[-_]/).filter((part) => part.length > 2).slice(0, 4)
+  return name
+    .split(/[-_]/)
+    .filter((part) => part.length > 2)
+    .slice(0, 4)
 }
 
 function normalizeOutput(value: string): string {
