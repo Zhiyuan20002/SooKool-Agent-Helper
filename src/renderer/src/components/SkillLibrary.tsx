@@ -70,6 +70,7 @@ import type {
 } from '@/types/skills'
 import { SkillMarket } from './SkillEcosystem'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { LocalShare } from './local-share/LocalShare'
 
 const skillMarkdownPath = 'SKILL.md'
 
@@ -83,6 +84,7 @@ function useTranslator(): (
 
 export function SkillLibrary({ view }: { view: ViewType }): React.JSX.Element {
   if (view === 'market') return <SkillMarket />
+  if (view === 'local-share') return <LocalShare />
   if (view === 'settings') return <SettingsView scope="general" />
   if (view === 'skill-settings') return <SettingsView scope="skills" />
   return <SkillsView />
@@ -114,7 +116,8 @@ function SkillsView(): React.JSX.Element {
     deleteSelectedSkill,
     revealSelectedSkill,
     clearError,
-    setCurrentView
+    setCurrentView,
+    setLocalShareDraftSkillPath
   } = useAppStore()
 
   const [applying, setApplying] = useState(false)
@@ -395,6 +398,17 @@ function SkillsView(): React.JSX.Element {
                   )}
                 </div>
                 <div className="detail-actions">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onPress={() => {
+                      setLocalShareDraftSkillPath(selectedSkill.path)
+                      setCurrentView('local-share')
+                    }}
+                  >
+                    <Share2 size={15} />
+                    {t('nav.localShare')}
+                  </Button>
                   <Button
                     className={applying ? 'transfer-mode-button active' : 'transfer-mode-button'}
                     size="sm"

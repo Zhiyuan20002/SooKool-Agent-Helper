@@ -57,6 +57,7 @@ export type TranslationKey =
   | 'app.subtitle'
   | 'nav.local'
   | 'nav.market'
+  | 'nav.localShare'
   | 'nav.skillSettings'
   | 'nav.settings'
   | 'sidebar.expand'
@@ -276,6 +277,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'app.subtitle': '智能体助手',
     'nav.local': '技能库',
     'nav.market': '技能市场',
+    'nav.localShare': '本地共享',
     'nav.skillSettings': '技能设置',
     'nav.settings': '设置',
     'sidebar.expand': '展开侧栏',
@@ -492,6 +494,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'app.subtitle': 'Agent Helper',
     'nav.local': 'Library',
     'nav.market': 'Market',
+    'nav.localShare': 'Local Share',
     'nav.skillSettings': 'Skill Settings',
     'nav.settings': 'Settings',
     'sidebar.expand': 'Expand sidebar',
@@ -709,6 +712,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'app.subtitle': '智能體助手',
     'nav.local': '技能庫',
     'nav.market': '技能市場',
+    'nav.localShare': '本機共享',
     'nav.skillSettings': '技能設定',
     'nav.settings': '設定',
     'sidebar.expand': '展開側邊欄',
@@ -796,6 +800,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'app.subtitle': 'エージェントアシスタント',
     'nav.local': 'ライブラリ',
     'nav.market': 'マーケット',
+    'nav.localShare': 'ローカル共有',
     'nav.skillSettings': 'Skill 設定',
     'nav.settings': '設定',
     'sidebar.expand': 'サイドバーを展開',
@@ -883,6 +888,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'app.subtitle': 'Assistant d’agents',
     'nav.local': 'Bibliothèque',
     'nav.market': 'Marché',
+    'nav.localShare': 'Partage local',
     'nav.skillSettings': 'Réglages Skill',
     'nav.settings': 'Réglages',
     'sidebar.expand': 'Développer la barre latérale',
@@ -970,6 +976,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'app.subtitle': '에이전트 도우미',
     'nav.local': '라이브러리',
     'nav.market': '마켓',
+    'nav.localShare': '로컬 공유',
     'nav.skillSettings': 'Skill 설정',
     'nav.settings': '설정',
     'sidebar.expand': '사이드바 펼치기',
@@ -1057,6 +1064,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'app.subtitle': 'Asistente de agentes',
     'nav.local': 'Biblioteca',
     'nav.market': 'Mercado',
+    'nav.localShare': 'Compartir localmente',
     'nav.skillSettings': 'Ajustes de Skill',
     'nav.settings': 'Ajustes',
     'sidebar.expand': 'Expandir barra lateral',
@@ -1144,6 +1152,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'app.subtitle': 'Assistente de agentes',
     'nav.local': 'Biblioteca',
     'nav.market': 'Mercado',
+    'nav.localShare': 'Compartilhamento local',
     'nav.skillSettings': 'Configurações de Skill',
     'nav.settings': 'Configurações',
     'sidebar.expand': 'Expandir barra lateral',
@@ -1231,6 +1240,7 @@ const translations: Record<AppLanguage, Partial<Record<TranslationKey, string>>>
     'app.subtitle': 'مساعد الوكلاء',
     'nav.local': 'المكتبة',
     'nav.market': 'السوق',
+    'nav.localShare': 'مشاركة محلية',
     'nav.skillSettings': 'إعدادات Skill',
     'nav.settings': 'الإعدادات',
     'sidebar.expand': 'توسيع الشريط الجانبي',

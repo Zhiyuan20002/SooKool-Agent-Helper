@@ -8,7 +8,7 @@ import {
   session,
   shell
 } from 'electron'
-import { join } from 'path'
+import { join, resolve, sep } from 'path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import {
   resolveAppLanguage,
@@ -21,10 +21,12 @@ import { installApplicationMenu } from './app-menu'
 import { getAppDisplayName } from './app-localization'
 import { ResourceManager } from './resources/resource-manager'
 import { focusExistingWindow } from './window-lifecycle'
+import { LocalShareManager } from './local-share/local-share-manager'
 
 let skillManager: SkillManager
 let skillMarketManager: SkillMarketManager
 let resourceManager: ResourceManager
+let localShareManager: LocalShareManager
 
 const appUserDataPath = app.getPath('userData')
 const settingsStore = new SettingsStore(join(appUserDataPath, 'settings.json'))
@@ -205,6 +207,36 @@ function registerIpc(): void {
     skillManager.revealSkill(skillPath)
   )
   ipcMain.handle('skill:transfer', async (_event, input) => skillManager.transferSkill(input))
+  ipcMain.handle('localShare:getState', async () => localShareManager.getState())
+  ipcMain.handle('localShare:enable', async (_event, durationMs?: number) =>
+    localShareManager.enable(durationMs)
+  )
+  ipcMain.handle('localShare:disable', async () => localShareManager.disable())
+  ipcMain.handle('localShare:addManualDevice', async (_event, input) =>
+    localShareManager.addManualDevice(input.address, input.port)
+  )
+  ipcMain.handle('localShare:respond', async (_event, input) =>
+    localShareManager.respondToRequest(input.requestId, input.decision)
+  )
+  ipcMain.handle('localShare:send', async (_event, input) => {
+    const skill = skillManager.readSkill(input.skillPath)
+    return localShareManager.sendSkill(input.deviceId, skill.path, input.parentHash ?? null)
+  })
+  ipcMain.handle('localShare:inspectInbox', async (_event, input) => {
+    const target = resolveLocalShareTarget(input.rootId, input.skillName)
+    return localShareManager.inspectInbox(input.itemId, target)
+  })
+  ipcMain.handle('localShare:applyInbox', async (_event, input) => {
+    const target = resolveLocalShareTarget(input.rootId, input.targetName || input.skillName)
+    const state = localShareManager.applyInbox(input.itemId, target)
+    await skillManager.refreshCatalogSnapshot('quick')
+    return state
+  })
+  ipcMain.handle('localShare:restore', async (_event, eventId: string) => {
+    const state = localShareManager.restoreHistoryToRecordedTarget(eventId)
+    await skillManager.refreshCatalogSnapshot('quick')
+    return state
+  })
   ipcMain.handle('backup:list', async () => skillManager.getBackups())
   ipcMain.handle('ecosystem:agents', async () =>
     skillManager.getCatalogSnapshot().applications.map((application) => ({
@@ -290,6 +322,21 @@ function registerIpc(): void {
   ipcMain.handle('app:clearResource', async (_event, id) => resourceManager.clear(id))
 }
 
+function resolveLocalShareTarget(rootId: string, rawName: string): string {
+  const root = skillManager.getSkillRoots().find((candidate) => candidate.id === rootId)
+  if (!root || root.readonly) throw new Error('请选择可写入的技能空间。')
+  const name = rawName
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/^\.+$/, '')
+  if (!name || name === '.' || name === '..') throw new Error('Skill 名称无效。')
+  const target = resolve(root.path, name)
+  const rootPath = resolve(root.path)
+  if (target !== rootPath && !target.startsWith(`${rootPath}${sep}`))
+    throw new Error('目标路径越出了技能空间。')
+  return target
+}
+
 if (hasSingleInstanceLock)
   app.whenReady().then(() => {
     electronApp.setAppUserModelId('com.sookool.agenthelper')
@@ -311,6 +358,13 @@ if (hasSingleInstanceLock)
       join(appUserDataPath, 'market-cache'),
       join(app.getAppPath(), 'node_modules/skills/bin/cli.mjs')
     )
+    localShareManager = new LocalShareManager({
+      rootPath: join(appUserDataPath, 'local-share'),
+      onChange: (state) =>
+        BrowserWindow.getAllWindows().forEach((window) =>
+          window.webContents.send('localShare:changed', state)
+        )
+    })
     resourceManager = new ResourceManager({
       userDataPath: appUserDataPath,
       logsPath: app.getPath('logs'),
@@ -329,4 +383,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => skillManager?.dispose())
+app.on('before-quit', () => {
+  localShareManager?.dispose()
+  skillManager?.dispose()
+})

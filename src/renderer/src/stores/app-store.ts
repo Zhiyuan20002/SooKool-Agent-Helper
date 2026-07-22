@@ -13,7 +13,7 @@ import type {
 
 let removeCatalogChangedListener: (() => void) | null = null
 
-export type ViewType = 'market' | 'local' | 'skill-settings' | 'settings'
+export type ViewType = 'market' | 'local-share' | 'local' | 'skill-settings' | 'settings'
 
 interface CreateSkillForm {
   rootId: string
@@ -27,6 +27,8 @@ interface AppState {
   initialized: boolean
   currentView: ViewType
   setCurrentView: (view: ViewType) => void
+  localShareDraftSkillPath: string | null
+  setLocalShareDraftSkillPath: (path: string | null) => void
 
   skillRoots: SkillRoot[]
   applications: SkillApplication[]
@@ -76,6 +78,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   initialized: false,
   currentView: 'local',
   setCurrentView: (view) => set({ currentView: view }),
+  localShareDraftSkillPath: null,
+  setLocalShareDraftSkillPath: (path) => set({ localShareDraftSkillPath: path }),
 
   skillRoots: [],
   applications: [],

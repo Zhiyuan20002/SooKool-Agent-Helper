@@ -5,8 +5,11 @@ declare global {
     electron: ElectronAPI
     aiHelper: {
       invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>
-      onNavigate: (callback: (view: 'local' | 'market' | 'settings') => void) => () => void
+      onNavigate: (
+        callback: (view: 'local' | 'market' | 'local-share' | 'settings') => void
+      ) => () => void
       onSkillCatalogChanged?: (callback: (catalog: unknown) => void) => () => void
+      onLocalShareChanged?: (callback: (state: unknown) => void) => () => void
     }
   }
 }

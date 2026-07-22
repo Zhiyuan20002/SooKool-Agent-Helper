@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Spinner, useTheme } from '@heroui/react'
-import { BookText, PanelLeftClose, PanelLeftOpen, Settings, Settings2, Store } from 'lucide-react'
+import { BookText, PanelLeftClose, PanelLeftOpen, RadioTower, Settings, Settings2, Store } from 'lucide-react'
 import { SkillLibrary } from '@/components/SkillLibrary'
 import { resolveAppLanguage, translate } from '@/i18n'
 import { useAppStore, type ViewType } from '@/stores/app-store'
@@ -15,6 +15,7 @@ const navItems: Array<{
 }> = [
   { id: 'local', labelKey: 'nav.local', icon: BookText },
   { id: 'market', labelKey: 'nav.market', icon: Store },
+  { id: 'local-share', labelKey: 'nav.localShare', icon: RadioTower },
   { id: 'skill-settings', labelKey: 'nav.skillSettings', icon: Settings2 }
 ]
 
