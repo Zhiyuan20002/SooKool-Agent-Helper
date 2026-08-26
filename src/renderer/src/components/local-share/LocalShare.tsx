@@ -55,62 +55,6 @@ const emptyState: LocalShareState = {
   activeTransfers: []
 }
 
-function withTemporaryLocalShareFixtures(value: LocalShareState): LocalShareState {
-  if (window.location.hostname !== 'localhost') return value
-  const now = Date.now()
-  const devices: LocalShareState['devices'] = Array.from({ length: 10 }, (_, index) => ({
-    id: `preview-device-${index + 1}`,
-    alias: `SooKool 设备 ${String(index + 1).padStart(2, '0')}`,
-    address: `192.168.1.${100 + index}`,
-    port: 54_001 + index,
-    fingerprint: `${index.toString(16)}`.repeat(64),
-    trusted: index % 3 === 0,
-    lastSeenAt: new Date(now - index * 1_000).toISOString()
-  }))
-  const incomingRequests: LocalShareState['incomingRequests'] = devices.map((device, index) => ({
-    id: `preview-request-${index + 1}`,
-    device,
-    manifest: {
-      name: `preview-skill-${String(index + 1).padStart(2, '0')}`,
-      description: '本地共享界面临时模拟数据。',
-      contentHash: `${((index + 3) % 16).toString(16)}`.repeat(64),
-      parentHash: null,
-      totalBytes: 12_000 + index * 3_217,
-      createdAt: new Date(now - index * 60_000).toISOString(),
-      files: [
-        {
-          path: 'SKILL.md',
-          size: 1_024 + index * 100,
-          sha256: `${((index + 5) % 16).toString(16)}`.repeat(64),
-          text: true,
-          executable: false
-        }
-      ]
-    },
-    pairingCode: String(310_000 + index * 137),
-    createdAt: new Date(now - index * 60_000).toISOString()
-  }))
-  const directions: LocalShareState['history'][number]['direction'][] = [
-    'sent',
-    'received',
-    'applied',
-    'restored'
-  ]
-  const history: LocalShareState['history'] = devices.map((device, index) => ({
-    id: `preview-history-${index + 1}`,
-    direction: directions[index % directions.length],
-    status: index % 5 === 3 ? 'failed' : index % 5 === 4 ? 'cancelled' : 'completed',
-    skillName: `preview-skill-${String(index + 1).padStart(2, '0')}`,
-    contentHash: `${((index + 11) % 16).toString(16)}`.repeat(64),
-    parentHash: null,
-    deviceAlias: device.alias,
-    targetPath: index % 3 === 0 ? `/tmp/preview-skill-${index + 1}` : null,
-    bytes: 18_000 + index * 4_096,
-    createdAt: new Date(now - index * 3_600_000).toISOString()
-  }))
-  return { ...value, devices, incomingRequests, inbox: [], history }
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`
@@ -171,12 +115,12 @@ export function LocalShare(): React.JSX.Element {
     void window.aiHelper
       .invoke<LocalShareState>('localShare:getState')
       .then((value) => {
-        if (active) setState(withTemporaryLocalShareFixtures(value))
+        if (active) setState(value)
       })
       .catch((reason) => setError(localizeError(reason, language, copy)))
       .finally(() => setLoading(false))
     const remove = window.aiHelper.onLocalShareChanged?.((value) =>
-      setState(withTemporaryLocalShareFixtures(value as LocalShareState))
+      setState(value as LocalShareState)
     )
     return () => {
       active = false
@@ -196,7 +140,7 @@ export function LocalShare(): React.JSX.Element {
     setBusy(true)
     setError(null)
     try {
-      setState(withTemporaryLocalShareFixtures(await operation()))
+      setState(await operation())
       return true
     } catch (reason) {
       setError(localizeError(reason, language, copy))
@@ -263,11 +207,7 @@ export function LocalShare(): React.JSX.Element {
       await Promise.all(
         Array.from({ length: Math.min(4, deviceIds.length) }, () => sendNextDevice())
       )
-      setState(
-        withTemporaryLocalShareFixtures(
-          await window.aiHelper.invoke<LocalShareState>('localShare:getState')
-        )
-      )
+      setState(await window.aiHelper.invoke<LocalShareState>('localShare:getState'))
       if (failures.length > 0) {
         setError(
           fillLocalShareCopy(copy.someDevicesFailed, {
