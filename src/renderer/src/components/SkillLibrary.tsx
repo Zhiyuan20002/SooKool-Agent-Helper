@@ -13,7 +13,7 @@ import {
   TextField,
   Tooltip
 } from '@heroui/react'
-import { AgentIcon, Antigravity, Qwen, agentMappings } from '@lobehub/icons'
+import { AgentIcon, Antigravity, DeepSeek, Qwen, agentMappings } from '@lobehub/icons'
 import {
   AlertTriangle,
   AppWindow,
@@ -1742,6 +1742,7 @@ function renderApplicationIcon(
   size: number
 ): React.JSX.Element | null {
   const text = candidates.flat().filter((candidate): candidate is string => Boolean(candidate)).join(' ').toLowerCase()
+  if (text.includes('deepseek')) return <DeepSeek.Color size={size} />
   if (text.includes('lingma')) return <AgentIcon agent="qoder" size={size} type="color" />
   if (text.includes('iflow')) return <Qwen.Color size={size} />
   if (text.includes('antigravity')) return <Antigravity.Color size={size} />

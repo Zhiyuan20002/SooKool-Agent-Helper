@@ -56,7 +56,7 @@
 
 ## 生态支持
 
-内置目录规则覆盖 Codex、Claude Code、Cursor、Gemini CLI、GitHub Copilot、OpenCode、OpenClaw、Hermes Agent、Kilo Code、Qoder、Qwen Code、Trae、Windsurf 等常见 Agent 工具。主技能库只展示本机已检测到的应用和有效技能位置，其他工具可通过自定义规则接入。
+内置目录规则覆盖 Codex、DeepSeek Harness、Claude Code、Cursor、Gemini CLI、GitHub Copilot、OpenCode、OpenClaw、Hermes Agent、Kilo Code、Qoder、Qwen Code、Trae、Windsurf 等常见 Agent 工具。主技能库只展示本机已检测到的应用和有效技能位置，其他工具可通过自定义规则接入。
 
 技能市场收录 Anthropic、OpenAI、OpenClaw、Hermes、Vercel Labs、Hugging Face、NVIDIA、腾讯 SkillHub、小红书 Red Skill、ModelScope Skills 和 ClawHub，并支持添加 Git 仓库、本地目录和兼容的自定义来源。
 

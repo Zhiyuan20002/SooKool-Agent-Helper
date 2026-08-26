@@ -53,11 +53,21 @@ export interface SkillsCommandLaunchSpec {
 const home = homedir()
 const codexHome = process.env.CODEX_HOME?.trim() || join(home, '.codex')
 const claudeHome = process.env.CLAUDE_CONFIG_DIR?.trim() || join(home, '.claude')
+const dshHome = process.env.DSH_HOME?.trim() || join(home, '.dsh')
+const dshAgentsHome = process.env.DSH_AGENTS_HOME?.trim() || join(home, '.agents')
+const dshSkillPath = join(dshHome, 'skills')
+const dshAgentsSkillPath = join(dshAgentsHome, 'skills')
 const vibeHome = process.env.VIBE_HOME?.trim() || join(home, '.vibe')
 const hermesHome = process.env.HERMES_HOME?.trim() || join(home, '.hermes')
 const autohandHome = process.env.AUTOHAND_HOME?.trim() || join(home, '.autohand')
 
-const agentCatalog: Array<Omit<SkillAgentAdapter, 'installed'> & { detectPaths: string[] }> = [
+interface SkillAgentCatalogEntry extends Omit<SkillAgentAdapter, 'installed'> {
+  detectPaths: string[]
+  projectPaths: string[]
+  globalPaths: string[]
+}
+
+const agentCatalog: SkillAgentCatalogEntry[] = [
   adapter('aider-desk', 'AiderDesk', '.aider-desk/skills', '~/.aider-desk/skills', [
     '~/.aider-desk'
   ]),
@@ -112,6 +122,17 @@ const agentCatalog: Array<Omit<SkillAgentAdapter, 'installed'> & { detectPaths: 
   ]),
   adapter('crush', 'Crush', '.crush/skills', '~/.config/crush/skills', ['~/.config/crush']),
   adapter('cursor', 'Cursor', '.agents/skills', '~/.cursor/skills', ['~/.cursor']),
+  adapter(
+    'deepseek-harness',
+    'DeepSeek Harness',
+    '.dsh/skills',
+    dshSkillPath,
+    [dshHome, '.dsh'],
+    {
+      projectPaths: ['.dsh/skills', '.agents/skills'],
+      globalPaths: [dshSkillPath, dshAgentsSkillPath]
+    }
+  ),
   adapter('deepagents', 'Deep Agents', '.agents/skills', '~/.deepagents/agent/skills', [
     '~/.deepagents'
   ]),
@@ -186,21 +207,23 @@ const agentCatalog: Array<Omit<SkillAgentAdapter, 'installed'> & { detectPaths: 
 ]
 
 export function listSkillAgentAdapters(cwd = process.cwd()): SkillAgentAdapter[] {
-  return agentCatalog.map(({ detectPaths, ...entry }) => ({
-    ...entry,
+  return agentCatalog.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    projectPath: entry.projectPath,
     globalPath: entry.globalPath ? expandPath(entry.globalPath) : null,
-    installed: detectPaths.some((path) => existsSync(resolveDetectPath(path, cwd)))
+    installed: entry.detectPaths.some((path) => existsSync(resolveDetectPath(path, cwd)))
   }))
 }
 
 export function listSkillApplicationRoots(cwd = process.cwd()): SkillApplicationRoot[] {
   return agentCatalog
-    .filter((entry) => entry.globalPath)
-    .map(({ detectPaths, ...entry }) => {
-      const path = expandPath(entry.globalPath as string)
+    .filter((entry) => entry.globalPaths.length > 0)
+    .map((entry) => {
+      const path = expandPath(entry.globalPaths[0])
       const installed =
-        existsSync(path) ||
-        detectPaths.some((detectPath) => existsSync(resolveDetectPath(detectPath, cwd)))
+        entry.globalPaths.some((globalPath) => existsSync(expandPath(globalPath))) ||
+        entry.detectPaths.some((detectPath) => existsSync(resolveDetectPath(detectPath, cwd)))
 
       return {
         id: entry.id,
@@ -218,10 +241,10 @@ export function listBuiltinApplicationRules(
 ): ApplicationRule[] {
   return agentCatalog
     .filter((entry) => {
-      const globalInstalled = entry.globalPath ? existsSync(expandPath(entry.globalPath)) : false
+      const globalInstalled = entry.globalPaths.some((path) => existsSync(expandPath(path)))
       const detected = entry.detectPaths.some((path) => existsSync(resolveDetectPath(path, cwd)))
       const projectInstalled = projects.some((project) => {
-        const hasSkills = existsSync(join(project.path, entry.projectPath))
+        const hasSkills = entry.projectPaths.some((path) => existsSync(join(project.path, path)))
         const detectedInProject = entry.detectPaths.some(
           (path) =>
             !path.startsWith('~/') &&
@@ -237,8 +260,8 @@ export function listBuiltinApplicationRules(
       name: entry.name,
       source: 'builtin' as const,
       detectionPaths: [...entry.detectPaths],
-      systemSkillPaths: entry.globalPath ? [expandPath(entry.globalPath)] : [],
-      projectSkillPaths: [entry.projectPath]
+      systemSkillPaths: entry.globalPaths.map(expandPath),
+      projectSkillPaths: [...entry.projectPaths]
     }))
 }
 
@@ -349,9 +372,18 @@ function adapter(
   name: string,
   projectPath: string,
   globalPath: string | null,
-  detectPaths: string[]
-): Omit<SkillAgentAdapter, 'installed'> & { detectPaths: string[] } {
-  return { id, name, projectPath, globalPath, detectPaths }
+  detectPaths: string[],
+  paths: { projectPaths?: string[]; globalPaths?: string[] } = {}
+): SkillAgentCatalogEntry {
+  return {
+    id,
+    name,
+    projectPath,
+    globalPath,
+    detectPaths,
+    projectPaths: paths.projectPaths ?? [projectPath],
+    globalPaths: paths.globalPaths ?? (globalPath ? [globalPath] : [])
+  }
 }
 
 function resolveDetectPath(path: string, cwd: string): string {

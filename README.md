@@ -56,7 +56,7 @@ The app is focused on Agent Skill management. It runs locally, detects only rele
 
 ## Ecosystem support
 
-Built-in directory rules cover common Agent tools including Codex, Claude Code, Cursor, Gemini CLI, GitHub Copilot, OpenCode, OpenClaw, Hermes Agent, Kilo Code, Qoder, Qwen Code, Trae, Windsurf, and many others. Only applications and valid Skill locations detected on your machine appear in the main library. Custom rules can connect additional tools.
+Built-in directory rules cover common Agent tools including Codex, DeepSeek Harness, Claude Code, Cursor, Gemini CLI, GitHub Copilot, OpenCode, OpenClaw, Hermes Agent, Kilo Code, Qoder, Qwen Code, Trae, Windsurf, and many others. Only applications and valid Skill locations detected on your machine appear in the main library. Custom rules can connect additional tools.
 
 The marketplace includes sources from Anthropic, OpenAI, OpenClaw, Hermes, Vercel Labs, Hugging Face, NVIDIA, Tencent SkillHub, Red Skill, ModelScope Skills, and ClawHub. Git repositories, local directories, and compatible custom sources can also be added.
 

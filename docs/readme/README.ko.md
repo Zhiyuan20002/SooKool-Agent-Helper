@@ -56,7 +56,7 @@ Agent 애플리케이션은 Skills를 서로 다른 시스템, 공유 및 프로
 
 ## 생태계 지원
 
-Codex, Claude Code, Cursor, Gemini CLI, GitHub Copilot, OpenCode, OpenClaw, Hermes Agent, Kilo Code, Qoder, Qwen Code, Trae, Windsurf 등 다양한 Agent 도구의 디렉터리 규칙이 내장되어 있습니다. 기본 라이브러리에는 로컬에서 감지된 앱과 유효한 Skill 위치만 표시됩니다. 추가 도구는 사용자 지정 규칙으로 연결할 수 있습니다.
+Codex, DeepSeek Harness, Claude Code, Cursor, Gemini CLI, GitHub Copilot, OpenCode, OpenClaw, Hermes Agent, Kilo Code, Qoder, Qwen Code, Trae, Windsurf 등 다양한 Agent 도구의 디렉터리 규칙이 내장되어 있습니다. 기본 라이브러리에는 로컬에서 감지된 앱과 유효한 Skill 위치만 표시됩니다. 추가 도구는 사용자 지정 규칙으로 연결할 수 있습니다.
 
 마켓에는 Anthropic, OpenAI, OpenClaw, Hermes, Vercel Labs, Hugging Face, NVIDIA, Tencent SkillHub, Red Skill, ModelScope Skills 및 ClawHub가 포함됩니다. Git 저장소, 로컬 디렉터리와 호환되는 사용자 지정 소스도 추가할 수 있습니다.
 

@@ -3,6 +3,7 @@ import { Button, Chip, ListBox, Pagination, ScrollShadow, Select, Skeleton, Spin
 import {
   AgentIcon,
   Anthropic,
+  DeepSeek,
   HermesAgent,
   HuggingFace,
   ModelScope,
@@ -1225,6 +1226,10 @@ function InstallPanel({ skill, onCancel, onInstalled, onError }: { skill: Market
 
 function InstallTargetIcon({ target }: { target: MarketInstallTarget }): React.JSX.Element {
   const candidates = [target.id, target.name, target.path].map(normalizeAgentText)
+
+  if (candidates.some((candidate) => candidate.includes('deepseek'))) {
+    return <span className="install-app-icon"><DeepSeek.Color size={28} /></span>
+  }
 
   for (const mapping of agentMappings) {
     for (const keyword of mapping.keywords) {
