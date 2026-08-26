@@ -220,6 +220,9 @@ function registerIpc(): void {
   ipcMain.handle('localShare:addManualDevice', async (_event, input) =>
     localShareManager.addManualDevice(input.address, input.port)
   )
+  ipcMain.handle('localShare:forgetTrustedDevice', async (_event, deviceId: string) =>
+    localShareManager.forgetTrustedDevice(deviceId)
+  )
   ipcMain.handle('localShare:respond', async (_event, input) =>
     localShareManager.respondToRequest(input.requestId, input.decision)
   )

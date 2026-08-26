@@ -10,8 +10,6 @@ import {
   Label,
   ListBox,
   ProgressBar,
-  Radio,
-  RadioGroup,
   ScrollShadow,
   Select,
   Spinner,
@@ -22,6 +20,7 @@ import {
 import {
   ArrowDownToLine,
   Check,
+  ChevronDown,
   Clock3,
   FileDiff,
   History,
@@ -33,7 +32,8 @@ import {
   ShieldCheck,
   ShieldQuestion,
   Wifi,
-  WifiOff
+  WifiOff,
+  X
 } from 'lucide-react'
 import { useAppStore } from '@/stores/app-store'
 import { resolveAppLanguage, type AppLanguage } from '@/i18n'
@@ -48,10 +48,67 @@ const emptyState: LocalShareState = {
   expiresAt: null,
   identity: { id: '', alias: '', fingerprint: '' },
   devices: [],
+  trustedDevices: [],
   incomingRequests: [],
   inbox: [],
   history: [],
   activeTransfers: []
+}
+
+function withTemporaryLocalShareFixtures(value: LocalShareState): LocalShareState {
+  if (window.location.hostname !== 'localhost') return value
+  const now = Date.now()
+  const devices: LocalShareState['devices'] = Array.from({ length: 10 }, (_, index) => ({
+    id: `preview-device-${index + 1}`,
+    alias: `SooKool 设备 ${String(index + 1).padStart(2, '0')}`,
+    address: `192.168.1.${100 + index}`,
+    port: 54_001 + index,
+    fingerprint: `${index.toString(16)}`.repeat(64),
+    trusted: index % 3 === 0,
+    lastSeenAt: new Date(now - index * 1_000).toISOString()
+  }))
+  const incomingRequests: LocalShareState['incomingRequests'] = devices.map((device, index) => ({
+    id: `preview-request-${index + 1}`,
+    device,
+    manifest: {
+      name: `preview-skill-${String(index + 1).padStart(2, '0')}`,
+      description: '本地共享界面临时模拟数据。',
+      contentHash: `${((index + 3) % 16).toString(16)}`.repeat(64),
+      parentHash: null,
+      totalBytes: 12_000 + index * 3_217,
+      createdAt: new Date(now - index * 60_000).toISOString(),
+      files: [
+        {
+          path: 'SKILL.md',
+          size: 1_024 + index * 100,
+          sha256: `${((index + 5) % 16).toString(16)}`.repeat(64),
+          text: true,
+          executable: false
+        }
+      ]
+    },
+    pairingCode: String(310_000 + index * 137),
+    createdAt: new Date(now - index * 60_000).toISOString()
+  }))
+  const directions: LocalShareState['history'][number]['direction'][] = [
+    'sent',
+    'received',
+    'applied',
+    'restored'
+  ]
+  const history: LocalShareState['history'] = devices.map((device, index) => ({
+    id: `preview-history-${index + 1}`,
+    direction: directions[index % directions.length],
+    status: index % 5 === 3 ? 'failed' : index % 5 === 4 ? 'cancelled' : 'completed',
+    skillName: `preview-skill-${String(index + 1).padStart(2, '0')}`,
+    contentHash: `${((index + 11) % 16).toString(16)}`.repeat(64),
+    parentHash: null,
+    deviceAlias: device.alias,
+    targetPath: index % 3 === 0 ? `/tmp/preview-skill-${index + 1}` : null,
+    bytes: 18_000 + index * 4_096,
+    createdAt: new Date(now - index * 3_600_000).toISOString()
+  }))
+  return { ...value, devices, incomingRequests, inbox: [], history }
 }
 
 function formatBytes(bytes: number): string {
@@ -89,7 +146,7 @@ export function LocalShare(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [selectedDeviceId, setSelectedDeviceId] = useState('')
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<string>>(() => new Set())
   const [selectedSkillPaths, setSelectedSkillPaths] = useState<Set<string>>(
     () => new Set(draftSkillPath ? [draftSkillPath] : [])
   )
@@ -114,12 +171,12 @@ export function LocalShare(): React.JSX.Element {
     void window.aiHelper
       .invoke<LocalShareState>('localShare:getState')
       .then((value) => {
-        if (active) setState(value)
+        if (active) setState(withTemporaryLocalShareFixtures(value))
       })
       .catch((reason) => setError(localizeError(reason, language, copy)))
       .finally(() => setLoading(false))
     const remove = window.aiHelper.onLocalShareChanged?.((value) =>
-      setState(value as LocalShareState)
+      setState(withTemporaryLocalShareFixtures(value as LocalShareState))
     )
     return () => {
       active = false
@@ -128,14 +185,18 @@ export function LocalShare(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (!selectedDeviceId && state.devices[0]) setSelectedDeviceId(state.devices[0].id)
-  }, [selectedDeviceId, state.devices])
+    const availableDeviceIds = new Set(state.devices.map((device) => device.id))
+    setSelectedDeviceIds((current) => {
+      const next = new Set([...current].filter((id) => availableDeviceIds.has(id)))
+      return next.size === current.size ? current : next
+    })
+  }, [state.devices])
 
   const run = async (operation: () => Promise<LocalShareState>): Promise<boolean> => {
     setBusy(true)
     setError(null)
     try {
-      setState(await operation())
+      setState(withTemporaryLocalShareFixtures(await operation()))
       return true
     } catch (reason) {
       setError(localizeError(reason, language, copy))
@@ -169,19 +230,52 @@ export function LocalShare(): React.JSX.Element {
     })
   }
 
+  const forgetTrustedDevice = (deviceId: string): void => {
+    void run(() =>
+      window.aiHelper.invoke<LocalShareState>('localShare:forgetTrustedDevice', deviceId)
+    )
+  }
+
   const sendSelected = async (): Promise<void> => {
-    if (!selectedDeviceId || selectedSkillPaths.size === 0) return
+    if (selectedDeviceIds.size === 0 || selectedSkillPaths.size === 0) return
     setBusy(true)
     setError(null)
     try {
-      let nextState = state
-      for (const skillPath of selectedSkillPaths) {
-        nextState = await window.aiHelper.invoke<LocalShareState>('localShare:send', {
-          deviceId: selectedDeviceId,
-          skillPath
-        })
+      const deviceIds = [...selectedDeviceIds]
+      const skillPaths = [...selectedSkillPaths]
+      const failures: unknown[] = []
+      let cursor = 0
+      const sendNextDevice = async (): Promise<void> => {
+        while (cursor < deviceIds.length) {
+          const deviceId = deviceIds[cursor++]
+          try {
+            for (const skillPath of skillPaths) {
+              await window.aiHelper.invoke<LocalShareState>('localShare:send', {
+                deviceId,
+                skillPath
+              })
+            }
+          } catch (reason) {
+            failures.push(reason)
+          }
+        }
       }
-      setState(nextState)
+      await Promise.all(
+        Array.from({ length: Math.min(4, deviceIds.length) }, () => sendNextDevice())
+      )
+      setState(
+        withTemporaryLocalShareFixtures(
+          await window.aiHelper.invoke<LocalShareState>('localShare:getState')
+        )
+      )
+      if (failures.length > 0) {
+        setError(
+          fillLocalShareCopy(copy.someDevicesFailed, {
+            failed: failures.length,
+            total: deviceIds.length
+          })
+        )
+      }
     } catch (reason) {
       setError(localizeError(reason, language, copy))
     } finally {
@@ -237,6 +331,7 @@ export function LocalShare(): React.JSX.Element {
       <div className="local-share-frame">
         <header className="local-share-header">
           <div className="local-share-heading">
+            <RadioTower size={25} aria-hidden="true" />
             <h1>{copy.title}</h1>
           </div>
           <div className="local-share-status">
@@ -307,66 +402,86 @@ export function LocalShare(): React.JSX.Element {
           </Tabs.ListContainer>
         </Tabs>
 
-        {tab === 'nearby' && (
-          <NearbyPanel
-            state={state}
-            skills={visibleSkills}
-            search={search}
-            selectedDeviceId={selectedDeviceId}
-            selectedSkillPaths={selectedSkillPaths}
-            busy={busy}
-            manualAddress={manualAddress}
-            onSearch={setSearch}
-            onManualAddress={setManualAddress}
-            onAddManual={addManualDevice}
-            onDevice={setSelectedDeviceId}
-            onSkill={(path) =>
-              setSelectedSkillPaths((current) => {
-                const next = new Set(current)
-                if (next.has(path)) next.delete(path)
-                else next.add(path)
-                return next
-              })
-            }
-            onSend={() => void sendSelected()}
-            copy={copy}
-          />
-        )}
-        {tab === 'inbox' && (
-          <InboxPanel
-            state={state}
-            writableRoots={writableRoots}
-            targetRoots={targetRoots}
-            inspections={inspections}
-            busy={busy}
-            onTarget={(itemId, rootId) =>
-              setTargetRoots((value) => ({ ...value, [itemId]: rootId }))
-            }
-            onRespond={(requestId, decision) =>
-              void run(() =>
-                window.aiHelper.invoke<LocalShareState>('localShare:respond', {
-                  requestId,
-                  decision
+        <div className="local-share-content">
+          {tab === 'nearby' && (
+            <NearbyPanel
+              state={state}
+              skills={visibleSkills}
+              search={search}
+              selectedDeviceIds={selectedDeviceIds}
+              selectedSkillPaths={selectedSkillPaths}
+              busy={busy}
+              manualAddress={manualAddress}
+              onSearch={setSearch}
+              onManualAddress={setManualAddress}
+              onAddManual={addManualDevice}
+              onForgetTrusted={forgetTrustedDevice}
+              onDevice={(id) =>
+                setSelectedDeviceIds((current) => {
+                  const next = new Set(current)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
+                  return next
                 })
-              )
-            }
-            onInspect={(itemId, name) => void inspectInbox(itemId, name)}
-            onApply={applyInbox}
-            copy={copy}
-            language={language}
-          />
-        )}
-        {tab === 'history' && (
-          <HistoryPanel
-            state={state}
-            busy={busy}
-            onRestore={(id) =>
-              void run(() => window.aiHelper.invoke<LocalShareState>('localShare:restore', id))
-            }
-            copy={copy}
-            language={language}
-          />
-        )}
+              }
+              onVisibleDevices={(ids, selected) =>
+                setSelectedDeviceIds((current) => {
+                  const next = new Set(current)
+                  for (const id of ids) {
+                    if (selected) next.add(id)
+                    else next.delete(id)
+                  }
+                  return next
+                })
+              }
+              onSkill={(path) =>
+                setSelectedSkillPaths((current) => {
+                  const next = new Set(current)
+                  if (next.has(path)) next.delete(path)
+                  else next.add(path)
+                  return next
+                })
+              }
+              onSend={() => void sendSelected()}
+              copy={copy}
+            />
+          )}
+          {tab === 'inbox' && (
+            <InboxPanel
+              state={state}
+              writableRoots={writableRoots}
+              targetRoots={targetRoots}
+              inspections={inspections}
+              busy={busy}
+              onTarget={(itemId, rootId) =>
+                setTargetRoots((value) => ({ ...value, [itemId]: rootId }))
+              }
+              onRespond={(requestId, decision) =>
+                void run(() =>
+                  window.aiHelper.invoke<LocalShareState>('localShare:respond', {
+                    requestId,
+                    decision
+                  })
+                )
+              }
+              onInspect={(itemId, name) => void inspectInbox(itemId, name)}
+              onApply={applyInbox}
+              copy={copy}
+              language={language}
+            />
+          )}
+          {tab === 'history' && (
+            <HistoryPanel
+              state={state}
+              busy={busy}
+              onRestore={(id) =>
+                void run(() => window.aiHelper.invoke<LocalShareState>('localShare:restore', id))
+              }
+              copy={copy}
+              language={language}
+            />
+          )}
+        </div>
       </div>
     </section>
   )
@@ -376,191 +491,301 @@ function NearbyPanel(props: {
   state: LocalShareState
   skills: Array<{ path: string; name: string; description: string; rootLabel: string }>
   search: string
-  selectedDeviceId: string
+  selectedDeviceIds: Set<string>
   selectedSkillPaths: Set<string>
   busy: boolean
   manualAddress: string
   onSearch: (value: string) => void
   onManualAddress: (value: string) => void
   onAddManual: () => void
+  onForgetTrusted: (deviceId: string) => void
   onDevice: (id: string) => void
+  onVisibleDevices: (ids: string[], selected: boolean) => void
   onSkill: (path: string) => void
   onSend: () => void
   copy: LocalShareCopy
 }): React.JSX.Element {
-  const selectedDevice = props.state.devices.find((device) => device.id === props.selectedDeviceId)
+  const [deviceSearch, setDeviceSearch] = useState('')
+  const [trustedExpanded, setTrustedExpanded] = useState(false)
+  const normalizedDeviceSearch = deviceSearch.trim().toLocaleLowerCase()
+  const visibleDevices = normalizedDeviceSearch
+    ? props.state.devices.filter((device) =>
+        `${device.alias} ${device.address}:${device.port}`
+          .toLocaleLowerCase()
+          .includes(normalizedDeviceSearch)
+      )
+    : props.state.devices
+  const allVisibleDevicesSelected =
+    visibleDevices.length > 0 &&
+    visibleDevices.every((device) => props.selectedDeviceIds.has(device.id))
   return (
     <div className="local-share-workspace">
-      <Card className="device-shelf" variant="secondary">
-        <Card.Header className="local-share-panel-heading">
-          <div>
-            <Card.Title>{props.copy.receiver}</Card.Title>
-            <Card.Description>
-              {props.state.enabled ? props.copy.receiverEnabled : props.copy.receiverDisabled}
-            </Card.Description>
-          </div>
-        </Card.Header>
-        <Card.Content className="device-shelf-content">
-          <div className="device-browser">
-            {!props.state.enabled ? (
-              <div className="compact-empty">
-                <WifiOff size={22} />
-                <div>
-                  <strong>{props.copy.sharingOff}</strong>
-                  <span>{props.copy.sharingOffHint}</span>
-                </div>
-              </div>
-            ) : props.state.devices.length === 0 ? (
-              <div className="compact-empty">
-                <RadioTower size={22} />
-                <div>
-                  <strong>{props.copy.searching}</strong>
-                  <span>{props.copy.searchingHint}</span>
-                </div>
-              </div>
-            ) : (
-              <ScrollShadow orientation="horizontal" className="device-scroll" hideScrollBar>
-                <RadioGroup
-                  aria-label={props.copy.receiver}
-                  className="device-options"
-                  value={props.selectedDeviceId}
-                  onChange={props.onDevice}
-                >
-                  {props.state.devices.map((device) => (
-                    <Radio key={device.id} value={device.id} className="device-option">
-                      <Radio.Content>
-                        <span className="device-avatar">
-                          <Laptop size={18} />
-                        </span>
-                        <span className="device-copy">
-                          <strong>{device.alias}</strong>
-                          <small>
-                            {device.address}:{device.port}
-                          </small>
-                        </span>
-                        <Chip
-                          size="sm"
-                          color={device.trusted ? 'success' : 'warning'}
-                          variant="soft"
-                        >
-                          {device.trusted ? (
-                            <ShieldCheck size={12} />
-                          ) : (
-                            <ShieldQuestion size={12} />
-                          )}
-                          {device.trusted ? props.copy.trusted : props.copy.firstConnection}
-                        </Chip>
-                        <Radio.Control>
-                          <Radio.Indicator />
-                        </Radio.Control>
-                      </Radio.Content>
-                    </Radio>
-                  ))}
-                </RadioGroup>
-              </ScrollShadow>
+      <div className="local-share-picker">
+        <Card className="device-shelf" variant="secondary">
+          <Card.Header className="local-share-panel-heading">
+            <div>
+              <Card.Title>{props.copy.receiver}</Card.Title>
+              <Card.Description>
+                {props.state.enabled ? props.copy.receiverEnabled : props.copy.receiverDisabled}
+              </Card.Description>
+            </div>
+            {props.state.enabled && visibleDevices.length > 0 && (
+              <Button
+                size="sm"
+                variant="tertiary"
+                onPress={() =>
+                  props.onVisibleDevices(
+                    visibleDevices.map((device) => device.id),
+                    !allVisibleDevicesSelected
+                  )
+                }
+              >
+                {allVisibleDevicesSelected
+                  ? props.copy.clearDeviceSelection
+                  : props.copy.selectAllDevices}
+              </Button>
             )}
-          </div>
-          <div className="manual-connect">
-            <TextField aria-label={props.copy.manualAddress} isDisabled={!props.state.enabled}>
+          </Card.Header>
+          <Card.Content className="device-shelf-content">
+            {props.state.enabled && (
+              <div className="device-toolbar">
+                <TextField
+                  className="device-search-field"
+                  aria-label={props.copy.searchDevice}
+                  isDisabled={props.state.devices.length === 0}
+                >
+                  <InputGroup fullWidth variant="secondary">
+                    <InputGroup.Prefix>
+                      <Search size={14} aria-hidden="true" />
+                    </InputGroup.Prefix>
+                    <InputGroup.Input
+                      value={deviceSearch}
+                      onChange={(event) => setDeviceSearch(event.target.value)}
+                      placeholder={props.copy.searchDevice}
+                    />
+                  </InputGroup>
+                </TextField>
+                <div className="manual-connect">
+                  <TextField aria-label={props.copy.manualAddress}>
+                    <InputGroup fullWidth variant="secondary">
+                      <InputGroup.Input
+                        value={props.manualAddress}
+                        onChange={(event) => props.onManualAddress(event.target.value)}
+                        placeholder="192.168.1.8:53318"
+                      />
+                    </InputGroup>
+                  </TextField>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    isDisabled={!props.manualAddress.trim()}
+                    onPress={props.onAddManual}
+                  >
+                    {props.copy.connect}
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div className="device-browser">
+              {!props.state.enabled ? (
+                <div className="compact-empty">
+                  <WifiOff size={22} />
+                  <div>
+                    <strong>{props.copy.sharingOff}</strong>
+                    <span>{props.copy.sharingOffHint}</span>
+                  </div>
+                </div>
+              ) : props.state.devices.length === 0 ? (
+                <div className="compact-empty">
+                  <RadioTower size={22} />
+                  <div>
+                    <strong>{props.copy.searching}</strong>
+                    <span>{props.copy.searchingHint}</span>
+                  </div>
+                </div>
+              ) : visibleDevices.length === 0 ? (
+                <div className="compact-empty compact-empty-search">
+                  <Search size={20} />
+                  <div>
+                    <strong>{props.copy.noDeviceMatches}</strong>
+                    <span>{props.copy.noDeviceMatchesHint}</span>
+                  </div>
+                </div>
+              ) : (
+                <ScrollShadow className="device-scroll" size={24}>
+                  <div className="device-options" aria-label={props.copy.receiver}>
+                    {visibleDevices.map((device) => (
+                      <Checkbox
+                        key={device.id}
+                        className="device-option"
+                        isSelected={props.selectedDeviceIds.has(device.id)}
+                        variant="secondary"
+                        onChange={() => props.onDevice(device.id)}
+                      >
+                        <Checkbox.Content>
+                          <span className="device-avatar">
+                            <Laptop size={18} />
+                          </span>
+                          <span className="device-copy">
+                            <strong>{device.alias}</strong>
+                            <small>
+                              {device.address}:{device.port}
+                            </small>
+                          </span>
+                          <Chip
+                            size="sm"
+                            color={device.trusted ? 'success' : 'warning'}
+                            variant="soft"
+                          >
+                            {device.trusted ? (
+                              <ShieldCheck size={12} />
+                            ) : (
+                              <ShieldQuestion size={12} />
+                            )}
+                            {device.trusted ? props.copy.trusted : props.copy.firstConnection}
+                          </Chip>
+                          <Checkbox.Control>
+                            <Checkbox.Indicator />
+                          </Checkbox.Control>
+                        </Checkbox.Content>
+                      </Checkbox>
+                    ))}
+                  </div>
+                </ScrollShadow>
+              )}
+            </div>
+            {props.state.trustedDevices.length > 0 && (
+              <div className="trusted-device-section">
+                <Button
+                  className="trusted-device-toggle"
+                  size="sm"
+                  variant="tertiary"
+                  aria-expanded={trustedExpanded}
+                  onPress={() => setTrustedExpanded((value) => !value)}
+                >
+                  <ShieldCheck size={14} />
+                  <span>{props.copy.trustedDevices}</span>
+                  <Chip size="sm" variant="soft">
+                    {props.state.trustedDevices.length}
+                  </Chip>
+                  <ChevronDown
+                    className={trustedExpanded ? 'expanded' : ''}
+                    size={14}
+                    aria-hidden="true"
+                  />
+                </Button>
+                {trustedExpanded && (
+                  <ScrollShadow className="trusted-device-scroll" size={20}>
+                    <div className="trusted-device-list">
+                      {props.state.trustedDevices.map((device) => (
+                        <div className="trusted-device-row" key={device.id}>
+                          <span>
+                            <strong>{device.alias}</strong>
+                            <small>{device.fingerprint.slice(0, 12)}</small>
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="tertiary"
+                            aria-label={fillLocalShareCopy(props.copy.revokeDeviceTrust, {
+                              device: device.alias
+                            })}
+                            isDisabled={props.busy}
+                            onPress={() => props.onForgetTrusted(device.id)}
+                          >
+                            {props.copy.revokeTrust}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollShadow>
+                )}
+              </div>
+            )}
+          </Card.Content>
+        </Card>
+
+        <Card className="skill-picker-card">
+          <Card.Header className="skill-picker-header">
+            <div className="skill-picker-title">
+              <PackageCheck size={17} aria-hidden="true" />
+              <Card.Title>{props.copy.selectSkill}</Card.Title>
+            </div>
+            <TextField className="share-search-field" aria-label={props.copy.searchSkill}>
               <InputGroup fullWidth variant="secondary">
+                <InputGroup.Prefix>
+                  <Search size={15} aria-hidden="true" />
+                </InputGroup.Prefix>
                 <InputGroup.Input
-                  value={props.manualAddress}
-                  onChange={(event) => props.onManualAddress(event.target.value)}
-                  placeholder="192.168.1.8:53318"
+                  value={props.search}
+                  onChange={(event) => props.onSearch(event.target.value)}
+                  placeholder={props.copy.searchSkill}
                 />
               </InputGroup>
             </TextField>
-            <Button
-              size="sm"
-              variant="secondary"
-              isDisabled={!props.state.enabled || !props.manualAddress.trim()}
-              onPress={props.onAddManual}
-            >
-              {props.copy.connect}
-            </Button>
-          </div>
-        </Card.Content>
-      </Card>
+          </Card.Header>
+          <Card.Content className="skill-picker-content">
+            <ScrollShadow className="share-skill-list" size={56}>
+              {props.skills.map((skill) => {
+                const selected = props.selectedSkillPaths.has(skill.path)
+                return (
+                  <Checkbox
+                    key={skill.path}
+                    className={`share-skill-option${selected ? ' selected' : ''}`}
+                    isSelected={selected}
+                    variant="secondary"
+                    onChange={() => props.onSkill(skill.path)}
+                  >
+                    <Checkbox.Content>
+                      <span className="share-skill-copy">
+                        <strong>{skill.name}</strong>
+                        <small>{skill.description || props.copy.noDescription}</small>
+                      </span>
+                      <Tooltip delay={300} closeDelay={100}>
+                        <Chip size="sm" variant="soft">
+                          {skill.rootLabel}
+                        </Chip>
+                        <Tooltip.Content showArrow placement="top">
+                          <Tooltip.Arrow />
+                          <span className="skill-path-tooltip">{skill.path}</span>
+                        </Tooltip.Content>
+                      </Tooltip>
+                      <Checkbox.Control>
+                        <Checkbox.Indicator />
+                      </Checkbox.Control>
+                    </Checkbox.Content>
+                  </Checkbox>
+                )
+              })}
+              {props.skills.length === 0 && (
+                <div className="skill-search-empty">{props.copy.noMatches}</div>
+              )}
+            </ScrollShadow>
+          </Card.Content>
+        </Card>
+      </div>
 
-      <Card className="skill-picker-card">
-        <Card.Header className="skill-picker-header">
-          <div className="skill-picker-title">
-            <PackageCheck size={17} aria-hidden="true" />
-            <Card.Title>{props.copy.selectSkill}</Card.Title>
-          </div>
-          <TextField className="share-search-field" aria-label={props.copy.searchSkill}>
-            <InputGroup fullWidth variant="secondary">
-              <InputGroup.Prefix>
-                <Search size={15} aria-hidden="true" />
-              </InputGroup.Prefix>
-              <InputGroup.Input
-                value={props.search}
-                onChange={(event) => props.onSearch(event.target.value)}
-                placeholder={props.copy.searchSkill}
-              />
-            </InputGroup>
-          </TextField>
-        </Card.Header>
-        <Card.Content className="skill-picker-content">
-          <ScrollShadow className="share-skill-list" size={56}>
-            {props.skills.map((skill) => {
-              const selected = props.selectedSkillPaths.has(skill.path)
-              return (
-                <Checkbox
-                  key={skill.path}
-                  className={`share-skill-option${selected ? ' selected' : ''}`}
-                  isSelected={selected}
-                  variant="secondary"
-                  onChange={() => props.onSkill(skill.path)}
-                >
-                  <Checkbox.Content>
-                    <span className="share-skill-copy">
-                      <strong>{skill.name}</strong>
-                      <small>{skill.description || props.copy.noDescription}</small>
-                    </span>
-                    <Tooltip delay={300} closeDelay={100}>
-                      <Chip size="sm" variant="soft">
-                        {skill.rootLabel}
-                      </Chip>
-                      <Tooltip.Content showArrow placement="top">
-                        <Tooltip.Arrow />
-                        <span className="skill-path-tooltip">{skill.path}</span>
-                      </Tooltip.Content>
-                    </Tooltip>
-                    <Checkbox.Control>
-                      <Checkbox.Indicator />
-                    </Checkbox.Control>
-                  </Checkbox.Content>
-                </Checkbox>
-              )
-            })}
-            {props.skills.length === 0 && (
-              <div className="skill-search-empty">{props.copy.noMatches}</div>
-            )}
-          </ScrollShadow>
-        </Card.Content>
-        <Card.Footer className="skill-picker-footer">
-          <div className="selection-receipt">
-            <strong>{props.selectedSkillPaths.size}</strong>
-            <span>{props.copy.skillUnit}</span>
-            <span className="selection-arrow">→</span>
-            <strong className="selection-device">
-              {selectedDevice?.alias || props.copy.noDevice}
-            </strong>
-          </div>
-          <Button
-            variant="primary"
-            isPending={props.busy}
-            isDisabled={
-              !props.state.enabled || !props.selectedDeviceId || props.selectedSkillPaths.size === 0
-            }
-            onPress={props.onSend}
-          >
-            <Send size={16} />
-            {props.copy.confirmSend}
-          </Button>
-        </Card.Footer>
-      </Card>
+      <div className="skill-picker-footer">
+        <div className="selection-receipt">
+          <strong>{props.selectedSkillPaths.size}</strong>
+          <span>{props.copy.skillUnit}</span>
+          <span className="selection-arrow">→</span>
+          <strong>{props.selectedDeviceIds.size}</strong>
+          <span>{props.copy.deviceUnit}</span>
+        </div>
+        <Button
+          variant="primary"
+          isPending={props.busy}
+          isDisabled={
+            !props.state.enabled ||
+            props.selectedDeviceIds.size === 0 ||
+            props.selectedSkillPaths.size === 0
+          }
+          onPress={props.onSend}
+        >
+          <Send size={16} />
+          {props.copy.confirmSend}
+        </Button>
+      </div>
 
       {props.state.activeTransfers.length > 0 && (
         <Card className="transfer-card" variant="secondary">
@@ -661,6 +886,7 @@ function InboxPanel(props: {
               isDisabled={props.busy}
               onPress={() => props.onRespond(request.id, 'accept-once')}
             >
+              <ArrowDownToLine size={14} aria-hidden="true" />
               {props.copy.acceptOnce}
             </Button>
             <Button
@@ -669,6 +895,7 @@ function InboxPanel(props: {
               isDisabled={props.busy}
               onPress={() => props.onRespond(request.id, 'trust')}
             >
+              <ShieldCheck size={14} aria-hidden="true" />
               {props.copy.acceptTrust}
             </Button>
             <Button
@@ -676,6 +903,7 @@ function InboxPanel(props: {
               variant="tertiary"
               onPress={() => props.onRespond(request.id, 'reject')}
             >
+              <X size={14} aria-hidden="true" />
               {props.copy.reject}
             </Button>
           </Card.Footer>
@@ -884,26 +1112,30 @@ function HistoryPanel(props: {
                   {event.status === 'failed' ? props.copy.failed : props.copy.cancelled}
                 </Chip>
               )}
+              {event.targetPath && (
+                <Button
+                  className="history-restore-button"
+                  size="sm"
+                  variant="tertiary"
+                  isDisabled={props.busy}
+                  onPress={() => props.onRestore(event.id)}
+                >
+                  <History size={12} aria-hidden="true" />
+                  {props.copy.restoreVersion}
+                </Button>
+              )}
             </div>
             <Card.Description>
               {labels[event.direction]}
               {event.deviceAlias ? ` · ${event.deviceAlias}` : ''}
             </Card.Description>
           </Card.Header>
-          <Chip size="sm" variant="soft" className="history-hash">
-            {event.contentHash.slice(0, 10)}
-          </Chip>
-          <span className="history-time">{formatTime(event.createdAt, props.language)}</span>
-          {event.targetPath && (
-            <Button
-              size="sm"
-              variant="tertiary"
-              isDisabled={props.busy}
-              onPress={() => props.onRestore(event.id)}
-            >
-              {props.copy.restoreVersion}
-            </Button>
-          )}
+          <div className="history-meta">
+            <Chip size="sm" variant="soft" className="history-hash">
+              {event.contentHash.slice(0, 10)}
+            </Chip>
+            <span className="history-time">{formatTime(event.createdAt, props.language)}</span>
+          </div>
         </Card>
       ))}
     </div>

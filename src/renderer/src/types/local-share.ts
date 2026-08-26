@@ -31,6 +31,12 @@ export interface LocalShareState {
   expiresAt: string | null
   identity: { id: string; alias: string; fingerprint: string }
   devices: LocalShareDevice[]
+  trustedDevices: Array<{
+    id: string
+    alias: string
+    fingerprint: string
+    trustedAt: string
+  }>
   incomingRequests: Array<{
     id: string
     device: LocalShareDevice

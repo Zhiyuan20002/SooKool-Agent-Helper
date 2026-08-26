@@ -29,7 +29,7 @@ import {
 import { TrustedDeviceStore } from './trusted-device-store.ts'
 
 interface PendingRequest extends IncomingShareRequest {
-  status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'uploaded'
+  status: 'pending' | 'accepted' | 'uploading' | 'rejected' | 'cancelled' | 'uploaded'
   uploadToken: string | null
   peerFingerprint: string
   expiresAt: string
@@ -40,6 +40,7 @@ interface LocalShareManagerOptions {
   alias?: string
   port?: number
   discovery?: boolean
+  completedTransferRetentionMs?: number
   onChange?: (state: LocalShareState) => void
 }
 
@@ -55,12 +56,14 @@ const MAX_SHARE_DURATION_MS = 60 * 60_000
 const MAX_PENDING_REQUESTS = 32
 const MAX_PENDING_PER_DEVICE = 3
 const MAX_PREPARES_PER_MINUTE = 20
+const COMPLETED_TRANSFER_RETENTION_MS = 5_000
 
 export class LocalShareManager {
   private readonly rootPath: string
   private readonly preferredPort: number
   private readonly useDiscovery: boolean
   private readonly onChange: (state: LocalShareState) => void
+  private readonly completedTransferRetentionMs: number
   private readonly identity: DeviceIdentity
   private readonly trustedDevices: TrustedDeviceStore
   private readonly revisions: RevisionStore
@@ -71,16 +74,21 @@ export class LocalShareManager {
   private expiryTimer: NodeJS.Timeout | null = null
   private pendingShutdown = false
   private devices = new Map<string, LocalShareDevice>()
+  private discoveredDevices = new Map<string, LocalShareDevice>()
+  private manualDevices = new Map<string, LocalShareDevice>()
   private requests = new Map<string, PendingRequest>()
   private prepareAttempts = new Map<string, number[]>()
   private inbox: LocalShareInboxItem[] = []
   private activeTransfers: LocalShareState['activeTransfers'] = []
+  private transferCleanupTimers = new Map<string, NodeJS.Timeout>()
 
   constructor(options: LocalShareManagerOptions) {
     this.rootPath = options.rootPath
     this.preferredPort = options.port ?? 53318
     this.useDiscovery = options.discovery !== false
     this.onChange = options.onChange ?? (() => undefined)
+    this.completedTransferRetentionMs =
+      options.completedTransferRetentionMs ?? COMPLETED_TRANSFER_RETENTION_MS
     mkdirSync(this.rootPath, { recursive: true })
     this.identity = loadOrCreateDeviceIdentity(
       join(this.rootPath, 'identity', 'device.json'),
@@ -101,6 +109,7 @@ export class LocalShareManager {
         fingerprint: this.identity.fingerprint
       },
       devices: [...this.devices.values()].sort((a, b) => a.alias.localeCompare(b.alias)),
+      trustedDevices: this.trustedDevices.list().sort((a, b) => a.alias.localeCompare(b.alias)),
       incomingRequests: [...this.requests.values()]
         .filter((request) => request.status === 'pending' && !this.isRequestExpired(request))
         .map(
@@ -132,7 +141,8 @@ export class LocalShareManager {
           this.port,
           (id, fingerprint) => this.trustedDevices.isTrusted(id, fingerprint),
           (devices) => {
-            this.devices = new Map(devices.map((device) => [device.id, device]))
+            this.discoveredDevices = new Map(devices.map((device) => [device.id, device]))
+            this.rebuildDevices()
             this.emit()
           }
         )
@@ -176,12 +186,16 @@ export class LocalShareManager {
     this.prepareAttempts.clear()
     await this.closeServer()
     this.devices.clear()
+    this.discoveredDevices.clear()
+    this.manualDevices.clear()
     this.emit()
     return this.getState()
   }
 
   dispose(): void {
     if (this.expiryTimer) clearTimeout(this.expiryTimer)
+    for (const timer of this.transferCleanupTimers.values()) clearTimeout(timer)
+    this.transferCleanupTimers.clear()
     this.discovery?.stop()
     this.server?.closeAllConnections()
     this.server?.close()
@@ -195,11 +209,12 @@ export class LocalShareManager {
 
   addKnownDevice(device: LocalShareDevice): LocalShareState {
     if (!isPrivateNetworkAddress(device.address)) throw new Error('只能连接私有或本机网络地址。')
-    this.devices.set(device.id, {
+    this.manualDevices.set(device.id, {
       ...device,
       fingerprint: normalizeFingerprint(device.fingerprint),
       trusted: this.trustedDevices.isTrusted(device.id, normalizeFingerprint(device.fingerprint))
     })
+    this.rebuildDevices()
     this.emit()
     return this.getState()
   }
@@ -218,6 +233,18 @@ export class LocalShareManager {
       trusted: this.trustedDevices.isTrusted(discovered.id, discovered.fingerprint),
       lastSeenAt: new Date().toISOString()
     })
+    return this.getState()
+  }
+
+  forgetTrustedDevice(deviceId: string): LocalShareState {
+    this.trustedDevices.remove(deviceId)
+    const device = this.devices.get(deviceId)
+    if (device) device.trusted = false
+    const discovered = this.discoveredDevices.get(deviceId)
+    if (discovered) discovered.trusted = false
+    const manual = this.manualDevices.get(deviceId)
+    if (manual) manual.trusted = false
+    this.emit()
     return this.getState()
   }
 
@@ -283,7 +310,14 @@ export class LocalShareManager {
         }
       )
       if (prepared.statusCode !== 202) throw new Error('对方未能创建接收请求。')
-      this.updateTransfer(transferId, { pairingCode: prepared.value.pairingCode })
+      const expectedPairingCode = pairingCode(
+        this.identity.fingerprint,
+        device.fingerprint,
+        prepared.value.requestId
+      )
+      if (prepared.value.pairingCode !== expectedPairingCode)
+        throw new Error('设备配对码校验失败，连接可能已被拦截。')
+      this.updateTransfer(transferId, { pairingCode: expectedPairingCode })
       let token: string | null = null
       for (let attempt = 0; attempt < 240; attempt++) {
         const status = await this.requestJson<{ status: string; uploadToken?: string }>(
@@ -543,42 +577,61 @@ export class LocalShareManager {
         ) {
           return this.respond(response, 401, { error: 'invalid-session' })
         }
-        const buffer = await this.readBuffer(request, 512 * 1024 * 1024)
-        const expectedPackageHash = request.headers['x-package-sha256']
-        const actualPackageHash = createHash('sha256').update(buffer).digest('hex')
-        if (expectedPackageHash !== actualPackageHash)
-          return this.respond(response, 422, { error: 'package-hash-mismatch' })
-        const temporary = join(this.revisions.stagingPath, `receive-${pending.id}`)
-        rmSync(temporary, { recursive: true, force: true })
-        mkdirSync(temporary, { recursive: true })
+        pending.status = 'uploading'
+        pending.uploadToken = null
+        const transferId = `receive:${pending.id}`
+        this.activeTransfers.push({
+          id: transferId,
+          direction: 'receive',
+          skillName: pending.manifest.name,
+          deviceAlias: pending.device.alias,
+          status: 'transferring',
+          progress: 0.2
+        })
+        this.emit()
         try {
-          const manifest = extractSharePackage(buffer, temporary, pending.manifest)
-          const event = this.revisions.capture(temporary, {
-            direction: 'received',
-            status: 'completed',
-            deviceId: pending.device.id,
-            deviceAlias: pending.device.alias,
-            parentHash: manifest.parentHash
-          })
-          this.inbox.push({
-            id: crypto.randomUUID(),
-            eventId: event.id,
-            sender: {
-              id: pending.device.id,
-              alias: pending.device.alias,
-              fingerprint: pending.device.fingerprint
-            },
-            manifest,
-            packagePath: event.objectPath,
-            receivedAt: new Date().toISOString(),
-            status: 'ready'
-          })
-          this.saveInbox()
-          pending.status = 'uploaded'
-          this.emit()
-          return this.respond(response, 200, { success: true })
-        } finally {
+          const buffer = await this.readBuffer(request, 512 * 1024 * 1024)
+          const expectedPackageHash = request.headers['x-package-sha256']
+          const actualPackageHash = createHash('sha256').update(buffer).digest('hex')
+          if (expectedPackageHash !== actualPackageHash) throw new Error('package-hash-mismatch')
+          const temporary = join(this.revisions.stagingPath, `receive-${pending.id}`)
           rmSync(temporary, { recursive: true, force: true })
+          mkdirSync(temporary, { recursive: true })
+          try {
+            const manifest = extractSharePackage(buffer, temporary, pending.manifest)
+            const event = this.revisions.capture(temporary, {
+              direction: 'received',
+              status: 'completed',
+              deviceId: pending.device.id,
+              deviceAlias: pending.device.alias,
+              parentHash: manifest.parentHash
+            })
+            this.inbox.push({
+              id: crypto.randomUUID(),
+              eventId: event.id,
+              sender: {
+                id: pending.device.id,
+                alias: pending.device.alias,
+                fingerprint: pending.device.fingerprint
+              },
+              manifest,
+              packagePath: event.objectPath,
+              receivedAt: new Date().toISOString(),
+              status: 'ready'
+            })
+            this.saveInbox()
+            pending.status = 'uploaded'
+            this.updateTransfer(transferId, { status: 'completed', progress: 1 })
+            return this.respond(response, 200, { success: true })
+          } finally {
+            rmSync(temporary, { recursive: true, force: true })
+          }
+        } catch (error) {
+          pending.status = 'cancelled'
+          this.updateTransfer(transferId, { status: 'failed', progress: 0 })
+          if (error instanceof Error && error.message === 'package-hash-mismatch')
+            return this.respond(response, 422, { error: error.message })
+          throw error
         }
       }
       this.respond(response, 404, { error: 'not-found' })
@@ -790,7 +843,12 @@ export class LocalShareManager {
     const transfer = this.activeTransfers.find((item) => item.id === id)
     if (transfer) Object.assign(transfer, patch)
     this.emit()
-    if (this.pendingShutdown && !this.hasActiveTransfer()) void this.disable()
+    if (transfer && ['completed', 'cancelled', 'failed'].includes(transfer.status))
+      this.scheduleTransferCleanup(id)
+    if (this.pendingShutdown && !this.hasActiveTransfer())
+      setImmediate(() => {
+        if (this.pendingShutdown && !this.hasActiveTransfer()) void this.disable()
+      })
   }
 
   private hasActiveTransfer(): boolean {
@@ -855,5 +913,22 @@ export class LocalShareManager {
 
   private emit(): void {
     this.onChange(this.getState())
+  }
+
+  private rebuildDevices(): void {
+    this.devices = new Map(this.discoveredDevices)
+    for (const [id, device] of this.manualDevices) this.devices.set(id, device)
+  }
+
+  private scheduleTransferCleanup(id: string): void {
+    const existing = this.transferCleanupTimers.get(id)
+    if (existing) clearTimeout(existing)
+    const timer = setTimeout(() => {
+      this.transferCleanupTimers.delete(id)
+      this.activeTransfers = this.activeTransfers.filter((transfer) => transfer.id !== id)
+      this.emit()
+    }, this.completedTransferRetentionMs)
+    timer.unref()
+    this.transferCleanupTimers.set(id, timer)
   }
 }
