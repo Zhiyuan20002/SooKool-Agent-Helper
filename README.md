@@ -78,14 +78,19 @@ npm run dev
 
 ## Development
 
-| Command             | Description                                |
-| ------------------- | ------------------------------------------ |
-| `npm run dev`       | Start the Electron development environment |
-| `npm run typecheck` | Type-check the main and renderer processes |
-| `npm test`          | Run the automated test suite               |
-| `npm run build`     | Type-check and create a production build   |
-| `npm run dist:mac`  | Package the macOS application              |
-| `npm run dist:win`  | Package the Windows application            |
+| Command                           | Description                                   |
+| --------------------------------- | --------------------------------------------- |
+| `npm run dev`                     | Start the Electron development environment    |
+| `npm run typecheck`               | Type-check the main and renderer processes    |
+| `npm test`                        | Run the automated test suite                  |
+| `npm run build`                   | Type-check and create a production build      |
+| `npm run dist:mac`                | Package the macOS application                 |
+| `npm run dist:win`                | Package the Windows application               |
+| `npm run verify:update-artifacts` | Verify updater metadata and release artifacts |
+
+Stable desktop releases are built, signed, and published from version tags. See
+[`docs/releasing.md`](docs/releasing.md) for required secrets, versioning rules, and update
+artifact verification.
 
 The repository also contains Linux packaging configuration in `electron-builder.yml`.
 

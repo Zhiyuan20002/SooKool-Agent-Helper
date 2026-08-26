@@ -20,6 +20,11 @@ const api = {
     const listener = (_event: IpcRendererEvent, state: unknown) => callback(state)
     ipcRenderer.on('localShare:changed', listener)
     return () => ipcRenderer.removeListener('localShare:changed', listener)
+  },
+  onUpdateStateChanged: (callback: (state: unknown) => void) => {
+    const listener = (_event: IpcRendererEvent, state: unknown) => callback(state)
+    ipcRenderer.on('update:stateChanged', listener)
+    return () => ipcRenderer.removeListener('update:stateChanged', listener)
   }
 }
 

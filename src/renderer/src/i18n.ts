@@ -16,6 +16,7 @@ export interface AppPreferences {
   themeMode: ThemeMode
   language: AppLanguagePreference
   autoScanOnStart: boolean
+  automaticUpdateChecks: boolean
 }
 
 export interface AppMetrics {

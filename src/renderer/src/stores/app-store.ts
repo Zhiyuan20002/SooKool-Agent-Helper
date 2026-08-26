@@ -10,8 +10,10 @@ import type {
   SkillRoot,
   SkillSummary
 } from '@/types/skills'
+import type { UpdateState } from '../../../shared/update-types'
 
 let removeCatalogChangedListener: (() => void) | null = null
+let removeUpdateStateChangedListener: (() => void) | null = null
 
 export type ViewType = 'market' | 'local-share' | 'local' | 'skill-settings' | 'settings'
 
@@ -42,6 +44,7 @@ interface AppState {
   libraryPerspective: 'application' | 'project'
   preferences: AppPreferences
   appMetrics: AppMetrics | null
+  updateState: UpdateState
   projectDiscovery: ProjectDiscoveryStatus
   projectScanRoots: string[]
   projectScanRunning: boolean
@@ -51,6 +54,8 @@ interface AppState {
 
   initialize: () => Promise<void>
   loadAppMetrics: () => Promise<void>
+  checkForUpdates: () => Promise<void>
+  installUpdate: () => Promise<void>
   updatePreferences: (preferences: Partial<AppPreferences>) => Promise<void>
   refreshSkills: (mode?: 'quick' | 'deep') => Promise<void>
   cancelProjectScan: () => Promise<void>
@@ -94,9 +99,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   preferences: {
     themeMode: 'system',
     language: 'zh-CN',
-    autoScanOnStart: true
+    autoScanOnStart: true,
+    automaticUpdateChecks: true
   },
   appMetrics: null,
+  updateState: {
+    phase: 'disabled', currentVersion: '0.0.0', availableVersion: null, releaseDate: null,
+    progressPercent: null, transferredBytes: null, totalBytes: null, bytesPerSecond: null,
+    lastCheckedAt: null, errorCode: null
+  },
   projectDiscovery: {
     phase: 'idle', mode: null, discoveredProjects: 0, scannedDirectories: 0,
     truncatedRoots: [], completedAt: null
@@ -111,13 +122,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       set({ loading: true })
       const preferences = await window.aiHelper.invoke<AppPreferences>('settings:get')
-      const [catalog, backups, appMetrics, projectScanRoots] = await Promise.all([
+      const [catalog, backups, appMetrics, projectScanRoots, updateState] = await Promise.all([
         window.aiHelper.invoke<SkillCatalogSnapshot>('skillCatalog:get', {
           refresh: preferences.autoScanOnStart
         }),
         window.aiHelper.invoke<SkillBackupRecord[]>('backup:list'),
         window.aiHelper.invoke<AppMetrics>('app:metrics'),
-        window.aiHelper.invoke<string[]>('projectScanRoot:list').catch(() => [])
+        window.aiHelper.invoke<string[]>('projectScanRoot:list').catch(() => []),
+        window.aiHelper.invoke<UpdateState>('update:getState')
       ])
       set({
         preferences,
@@ -127,6 +139,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         skills: preferences.autoScanOnStart ? catalog.skills : [],
         backups,
         appMetrics,
+        updateState,
         projectDiscovery: catalog.discovery ?? get().projectDiscovery,
         projectScanRoots,
         selectedSkill: preferences.autoScanOnStart && catalog.skills[0]
@@ -146,6 +159,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           projectDiscovery: catalog.discovery ?? get().projectDiscovery
         })
       }) ?? null
+      removeUpdateStateChangedListener?.()
+      removeUpdateStateChangedListener = window.aiHelper.onUpdateStateChanged?.((value) => {
+        set({ updateState: value as UpdateState })
+      }) ?? null
     } catch (error) {
       set({ initialized: true, loading: false, error: String(error) })
     }
@@ -155,6 +172,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const appMetrics = await window.aiHelper.invoke<AppMetrics>('app:metrics')
       set({ appMetrics })
+    } catch (error) {
+      set({ error: String(error) })
+    }
+  },
+
+  checkForUpdates: async () => {
+    try {
+      const updateState = await window.aiHelper.invoke<UpdateState>('update:check')
+      set({ updateState })
+    } catch (error) {
+      set({ error: String(error) })
+    }
+  },
+
+  installUpdate: async () => {
+    try {
+      await window.aiHelper.invoke<boolean>('update:install')
     } catch (error) {
       set({ error: String(error) })
     }

@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Spinner, useTheme } from '@heroui/react'
-import { BookText, PanelLeftClose, PanelLeftOpen, RadioTower, Settings, Settings2, Store } from 'lucide-react'
+import { BookText, PanelLeftClose, PanelLeftOpen, RadioTower, RefreshCw, Settings, Settings2, Store, X } from 'lucide-react'
 import { SkillLibrary } from '@/components/SkillLibrary'
 import { resolveAppLanguage, translate } from '@/i18n'
 import { useAppStore, type ViewType } from '@/stores/app-store'
 import sookoolLogo from './assets/sookool-app-icon-ui.png'
 import sookoolLogoDark from './assets/sookool-app-icon-ui-dark.png'
 import sookoolWordmark from './assets/sookool-wordmark.png'
+import { softwareUpdateCopy } from './update-copy'
 
 const navItems: Array<{
   id: ViewType
@@ -20,14 +21,17 @@ const navItems: Array<{
 ]
 
 export function App(): React.JSX.Element {
-  const { initialized, initialize, currentView, setCurrentView, skills, preferences } =
+  const { initialized, initialize, currentView, setCurrentView, skills, preferences, updateState, installUpdate } =
     useAppStore()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(null)
   const { setTheme } = useTheme(preferences.themeMode)
   const t = (
     key: Parameters<typeof translate>[1],
     replacements?: Parameters<typeof translate>[2]
   ) => translate(preferences.language, key, replacements)
+  const updateCopy = softwareUpdateCopy(resolveAppLanguage(preferences.language))
+  const showUpdateReady = updateState.phase === 'downloaded' && updateState.availableVersion !== dismissedUpdateVersion
 
   useEffect(() => {
     if (!initialized) void initialize()
@@ -111,6 +115,21 @@ export function App(): React.JSX.Element {
           <SkillLibrary view={currentView} />
         </main>
       </section>
+
+      {showUpdateReady && (
+        <aside className="update-ready-banner no-drag" aria-live="polite" aria-label={updateCopy.bannerTitle}>
+          <div className="update-ready-banner-icon" aria-hidden="true"><RefreshCw size={18} /></div>
+          <div className="update-ready-banner-copy">
+            <strong>{updateCopy.bannerTitle}</strong>
+            <p>{updateCopy.bannerDescription}</p>
+            <div className="update-ready-banner-actions">
+              <Button size="sm" variant="primary" onPress={() => void installUpdate()}>{updateCopy.install}</Button>
+              <Button size="sm" variant="ghost" onPress={() => setDismissedUpdateVersion(updateState.availableVersion)}>{updateCopy.later}</Button>
+            </div>
+          </div>
+          <Button className="update-ready-banner-close" aria-label={updateCopy.later} isIconOnly size="sm" variant="ghost" onPress={() => setDismissedUpdateVersion(updateState.availableVersion)}><X size={15} /></Button>
+        </aside>
+      )}
     </div>
   )
 }

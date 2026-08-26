@@ -22,11 +22,14 @@ import { getAppDisplayName } from './app-localization'
 import { ResourceManager } from './resources/resource-manager'
 import { focusExistingWindow } from './window-lifecycle'
 import { LocalShareManager } from './local-share/local-share-manager'
+import electronUpdater from 'electron-updater'
+import { UpdateManager } from './update/update-manager'
 
 let skillManager: SkillManager
 let skillMarketManager: SkillMarketManager
 let resourceManager: ResourceManager
 let localShareManager: LocalShareManager
+let updateManager: UpdateManager | null = null
 
 const appUserDataPath = app.getPath('userData')
 const settingsStore = new SettingsStore(join(appUserDataPath, 'settings.json'))
@@ -53,7 +56,9 @@ function applyAppLanguage(preference: AppLanguagePreference): void {
     copyright: `© ${new Date().getFullYear()} SooKool`
   })
   BrowserWindow.getAllWindows().forEach((window) => window.setTitle(displayName))
-  installApplicationMenu(language)
+  installApplicationMenu(language, {
+    checkForUpdates: () => void updateManager?.checkForUpdates()
+  })
 }
 
 function getAppIconPath(dark = false): string {
@@ -283,10 +288,17 @@ function registerIpc(): void {
   })
   ipcMain.handle('settings:get', async () => settingsStore.getAppPreferences())
   ipcMain.handle('settings:update', async (_event, input) => {
+    const previousPreferences = settingsStore.getAppPreferences()
     const preferences = settingsStore.saveAppPreferences(input)
     applyAppLanguage(preferences.language)
+    if (preferences.automaticUpdateChecks !== previousPreferences.automaticUpdateChecks) {
+      updateManager?.setAutomaticChecks(preferences.automaticUpdateChecks)
+    }
     return preferences
   })
+  ipcMain.handle('update:getState', async () => updateManager?.getState())
+  ipcMain.handle('update:check', async () => updateManager?.checkForUpdates())
+  ipcMain.handle('update:install', async () => updateManager?.installDownloadedUpdate() ?? false)
   ipcMain.handle('app:metrics', async () => {
     const memory = process.memoryUsage()
     const processes = app.getAppMetrics().map((metric) => ({
@@ -370,9 +382,21 @@ if (hasSingleInstanceLock)
       logsPath: app.getPath('logs'),
       clearBrowserCache: () => session.defaultSession.clearCache()
     })
+    const { autoUpdater } = electronUpdater
+    updateManager = new UpdateManager({
+      updater: autoUpdater,
+      enabled: app.isPackaged && (process.platform === 'darwin' || process.platform === 'win32'),
+      automaticChecks: settingsStore.getAppPreferences().automaticUpdateChecks,
+      currentVersion: app.getVersion(),
+      onStateChanged: (state) =>
+        BrowserWindow.getAllWindows().forEach((window) => {
+          if (!window.isDestroyed()) window.webContents.send('update:stateChanged', state)
+        })
+    })
     registerIpc()
     nativeTheme.on('updated', updateDockIcon)
     createWindow()
+    updateManager.start()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -384,6 +408,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  updateManager?.dispose()
   localShareManager?.dispose()
   skillManager?.dispose()
 })

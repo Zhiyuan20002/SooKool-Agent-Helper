@@ -7,7 +7,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "test": "node --experimental-strip-types --test src/main/app-localization.test.ts src/main/window-lifecycle.test.ts src/main/local-share/local-share-manager.test.ts src/main/local-share/revision-store.test.ts src/main/local-share/skill-package.test.ts src/main/resources/resource-manager.test.ts src/main/settings/settings-store.test.ts src/main/skills/archive-extractor.test.ts src/main/skills/ecosystem.test.ts src/main/skills/market-catalog-cache.test.ts src/main/skills/market-source-loader.test.ts src/main/skills/project-discovery.test.ts src/main/skills/project-discovery-manager.test.ts src/main/skills/project-system-index.test.ts src/main/skills/skill-filesystem.test.ts src/main/skills/skill-topology.test.ts src/renderer/src/markdown-parser.test.ts src/renderer/src/market-load-utils.test.ts src/renderer/src/market-palettes.test.ts src/renderer/src/market-search-utils.test.ts src/renderer/src/skill-library-tree.test.ts",
+    "test": "node --experimental-strip-types --test src/main/app-localization.test.ts src/main/window-lifecycle.test.ts src/main/local-share/local-share-manager.test.ts src/main/local-share/revision-store.test.ts src/main/local-share/skill-package.test.ts src/main/resources/resource-manager.test.ts src/main/settings/settings-store.test.ts src/main/update/update-manager.test.ts src/main/skills/archive-extractor.test.ts src/main/skills/ecosystem.test.ts src/main/skills/market-catalog-cache.test.ts src/main/skills/market-source-loader.test.ts src/main/skills/project-discovery.test.ts src/main/skills/project-discovery-manager.test.ts src/main/skills/project-system-index.test.ts src/main/skills/skill-filesystem.test.ts src/main/skills/skill-topology.test.ts src/renderer/src/markdown-parser.test.ts src/renderer/src/market-load-utils.test.ts src/renderer/src/market-palettes.test.ts src/renderer/src/market-search-utils.test.ts src/renderer/src/skill-library-tree.test.ts",
     "format": "prettier --write .",
     "lint": "npm run typecheck",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -18,13 +18,15 @@
     "build": "npm run typecheck && electron-vite build",
     "benchmark:market": "node scripts/run-market-benchmark.mjs",
     "pack": "npm run build && electron-builder --dir",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:win": "npm run build && electron-builder --win"
+    "dist:mac": "npm run build && electron-builder --mac --x64 --arm64",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "verify:update-artifacts": "node scripts/verify-update-artifacts.mjs release"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "adm-zip": "^0.5.17",
+    "electron-updater": "6.7.3",
     "extract-zip": "^2.0.1",
     "selfsigned": "^3.0.1",
     "skills": "^1.5.15",

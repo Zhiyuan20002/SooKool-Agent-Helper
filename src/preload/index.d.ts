@@ -10,6 +10,7 @@ declare global {
       ) => () => void
       onSkillCatalogChanged?: (callback: (catalog: unknown) => void) => () => void
       onLocalShareChanged?: (callback: (state: unknown) => void) => () => void
+      onUpdateStateChanged?: (callback: (state: unknown) => void) => () => void
     }
   }
 }
