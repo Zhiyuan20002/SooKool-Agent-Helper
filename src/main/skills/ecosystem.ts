@@ -222,7 +222,7 @@ export function listSkillApplicationRoots(cwd = process.cwd()): SkillApplication
     .map((entry) => {
       const path = expandPath(entry.globalPaths[0])
       const installed =
-        entry.globalPaths.some((globalPath) => existsSync(expandPath(globalPath))) ||
+        (entry.globalPath ? existsSync(expandPath(entry.globalPath)) : false) ||
         entry.detectPaths.some((detectPath) => existsSync(resolveDetectPath(detectPath, cwd)))
 
       return {
@@ -241,7 +241,9 @@ export function listBuiltinApplicationRules(
 ): ApplicationRule[] {
   return agentCatalog
     .filter((entry) => {
-      const globalInstalled = entry.globalPaths.some((path) => existsSync(expandPath(path)))
+      const globalInstalled = entry.globalPath
+        ? existsSync(expandPath(entry.globalPath))
+        : false
       const detected = entry.detectPaths.some((path) => existsSync(resolveDetectPath(path, cwd)))
       const projectInstalled = projects.some((project) => {
         const hasSkills = entry.projectPaths.some((path) => existsSync(join(project.path, path)))

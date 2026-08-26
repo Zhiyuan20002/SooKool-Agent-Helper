@@ -56,3 +56,35 @@ test('detects DeepSeek Harness and exposes its native and shared skill roots', (
     rmSync(project, { recursive: true, force: true })
   }
 })
+
+test('does not treat the shared Agent Skills root as a DeepSeek Harness installation', async () => {
+  const project = mkdtempSync(join(tmpdir(), 'sookool-no-dsh-'))
+  const previousDshHome = process.env.DSH_HOME
+  const previousDshAgentsHome = process.env.DSH_AGENTS_HOME
+  try {
+    process.env.DSH_HOME = join(project, 'missing-dsh')
+    process.env.DSH_AGENTS_HOME = join(project, '.agents')
+    mkdirSync(join(project, '.agents', 'skills'), { recursive: true })
+
+    const moduleUrl = new URL(`./ecosystem.ts?no-dsh=${Date.now()}`, import.meta.url)
+    const isolatedModule = (await import(moduleUrl.href)) as typeof import('./ecosystem.ts')
+    assert.equal(
+      isolatedModule
+        .listSkillApplicationRoots(project)
+        .some((entry) => entry.id === 'deepseek-harness'),
+      false
+    )
+    assert.equal(
+      isolatedModule
+        .listBuiltinApplicationRules([], project)
+        .some((entry) => entry.id === 'deepseek-harness'),
+      false
+    )
+  } finally {
+    if (previousDshHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousDshHome
+    if (previousDshAgentsHome === undefined) delete process.env.DSH_AGENTS_HOME
+    else process.env.DSH_AGENTS_HOME = previousDshAgentsHome
+    rmSync(project, { recursive: true, force: true })
+  }
+})
