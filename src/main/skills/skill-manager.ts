@@ -17,7 +17,7 @@ import { isBuiltinApplicationId, listBuiltinApplicationRules } from './ecosystem
 import { ProjectDiscoveryManager } from './project-discovery-manager'
 import { buildSkillTopology, type ApplicationRule, type ProjectRegistration } from './skill-topology'
 import { buildSkillMarkdown, normalizeSkillName, parseSkillMarkdown } from './skill-parser'
-import { replaceDirectoryAtomically } from './skill-filesystem'
+import { isDirectoryPath, replaceDirectoryAtomically } from './skill-filesystem'
 import type {
   CreateSkillInput,
   ImportSkillInput,
@@ -63,7 +63,7 @@ export class SkillManager {
         path: location.path,
         readonly: false,
         defaultRoot: location.scope === 'system',
-        exists: existsSync(location.path),
+        exists: isDirectoryPath(location.path),
         source: 'application',
         category,
         appIds: location.applicationIds,
@@ -87,7 +87,7 @@ export class SkillManager {
         path,
         readonly: Boolean(root.readonly),
         defaultRoot: false,
-        exists: existsSync(path),
+        exists: isDirectoryPath(path),
         source: 'custom',
         category: 'custom',
         appIds: [],
@@ -190,7 +190,13 @@ export class SkillManager {
     const skills: SkillSummary[] = []
 
     for (const root of roots) {
-      const skillFiles = findSkillFiles(root.path)
+      let skillFiles: string[]
+      try {
+        skillFiles = findSkillFiles(root.path)
+      } catch {
+        // A root can disappear, lose permissions, or be replaced by a file between discovery and scanning.
+        continue
+      }
       for (const skillFilePath of skillFiles) {
         try {
           skills.push(this.readSkillSummary(skillFilePath, root))
