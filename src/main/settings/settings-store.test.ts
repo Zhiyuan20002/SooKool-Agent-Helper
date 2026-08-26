@@ -77,3 +77,13 @@ test('resolves Traditional Chinese system locales to Hong Kong Chinese', () => {
   assert.equal(resolveAppLanguage('system', 'zh-Hant'), 'zh-HK')
   assert.equal(resolveAppLanguage('system', ['zh', 'TW'].join('-')), 'zh-HK')
 })
+
+test('enables automatic update checks when migrating older preferences', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'sookool-settings-'))
+  const path = join(directory, 'settings.json')
+  writeFileSync(path, JSON.stringify({ appPreferences: { autoScanOnStart: false } }))
+
+  const settings = new SettingsStore(path)
+  assert.equal(settings.getAppPreferences().automaticUpdateChecks, true)
+  assert.equal(settings.getAppPreferences().autoScanOnStart, false)
+})

@@ -1,5 +1,13 @@
-import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+
+export function isDirectoryPath(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
 
 export function replaceDirectoryAtomically(
   source: string,

@@ -3,9 +3,11 @@ import { electronAPI } from '@electron-toolkit/preload'
 
 const api = {
   invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
-  onNavigate: (callback: (view: 'local' | 'market' | 'settings') => void) => {
-    const listener = (_event: IpcRendererEvent, view: 'local' | 'market' | 'settings') =>
-      callback(view)
+  onNavigate: (callback: (view: 'local' | 'market' | 'local-share' | 'settings') => void) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      view: 'local' | 'market' | 'local-share' | 'settings'
+    ) => callback(view)
     ipcRenderer.on('menu:navigate', listener)
     return () => ipcRenderer.removeListener('menu:navigate', listener)
   },
@@ -13,6 +15,16 @@ const api = {
     const listener = (_event: IpcRendererEvent, catalog: unknown) => callback(catalog)
     ipcRenderer.on('skillCatalog:changed', listener)
     return () => ipcRenderer.removeListener('skillCatalog:changed', listener)
+  },
+  onLocalShareChanged: (callback: (state: unknown) => void) => {
+    const listener = (_event: IpcRendererEvent, state: unknown) => callback(state)
+    ipcRenderer.on('localShare:changed', listener)
+    return () => ipcRenderer.removeListener('localShare:changed', listener)
+  },
+  onUpdateStateChanged: (callback: (state: unknown) => void) => {
+    const listener = (_event: IpcRendererEvent, state: unknown) => callback(state)
+    ipcRenderer.on('update:stateChanged', listener)
+    return () => ipcRenderer.removeListener('update:stateChanged', listener)
   }
 }
 

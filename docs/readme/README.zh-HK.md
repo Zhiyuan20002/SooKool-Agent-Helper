@@ -56,7 +56,7 @@
 
 ## 生態支援
 
-內置目錄規則涵蓋 Codex、Claude Code、Cursor、Gemini CLI、GitHub Copilot、OpenCode、OpenClaw、Hermes Agent、Kilo Code、Qoder、Qwen Code、Trae、Windsurf 等常見 Agent 工具。主技能庫只顯示本地已偵測到的應用與有效技能位置，其他工具可透過自訂規則接入。
+內置目錄規則涵蓋 Codex、DeepSeek Harness、Claude Code、Cursor、Gemini CLI、GitHub Copilot、OpenCode、OpenClaw、Hermes Agent、Kilo Code、Qoder、Qwen Code、Trae、Windsurf 等常見 Agent 工具。主技能庫只顯示本地已偵測到的應用與有效技能位置，其他工具可透過自訂規則接入。
 
 技能市場收錄 Anthropic、OpenAI、OpenClaw、Hermes、Vercel Labs、Hugging Face、NVIDIA、騰訊 SkillHub、小紅書 Red Skill、ModelScope Skills 與 ClawHub，並支援加入 Git 版本庫、本地目錄和相容的自訂來源。
 

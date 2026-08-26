@@ -14,6 +14,7 @@ interface MenuLabels {
   file: string
   forceReload: string
   help: string
+  checkForUpdates: string
   hide: string
   hideOthers: string
   local: string
@@ -68,7 +69,8 @@ const labels: Record<AppLanguage, MenuLabels> = {
     window: '窗口',
     minimize: '最小化',
     zoom: '缩放',
-    help: '帮助'
+    help: '帮助',
+    checkForUpdates: '检查更新…'
   },
   'en-US': {
     app: appDisplayNames['en-US'],
@@ -100,7 +102,8 @@ const labels: Record<AppLanguage, MenuLabels> = {
     zoomOut: 'Zoom Out',
     window: 'Window',
     minimize: 'Minimize',
-    help: 'Help'
+    help: 'Help',
+    checkForUpdates: 'Check for Updates…'
   },
   'zh-HK': {
     app: appDisplayNames['zh-HK'],
@@ -132,7 +135,8 @@ const labels: Record<AppLanguage, MenuLabels> = {
     zoomOut: '縮小',
     window: '視窗',
     minimize: '最小化',
-    help: '幫助'
+    help: '幫助',
+    checkForUpdates: '檢查更新…'
   },
   'ja-JP': {
     app: appDisplayNames['ja-JP'],
@@ -164,7 +168,8 @@ const labels: Record<AppLanguage, MenuLabels> = {
     zoomOut: '縮小',
     window: 'ウインドウ',
     minimize: 'しまう',
-    help: 'ヘルプ'
+    help: 'ヘルプ',
+    checkForUpdates: 'アップデートを確認…'
   },
   'fr-FR': {
     app: appDisplayNames['fr-FR'],
@@ -196,7 +201,8 @@ const labels: Record<AppLanguage, MenuLabels> = {
     zoomOut: 'Zoom arrière',
     window: 'Fenêtre',
     minimize: 'Réduire',
-    help: 'Aide'
+    help: 'Aide',
+    checkForUpdates: 'Rechercher les mises à jour…'
   },
   'ko-KR': {
     app: appDisplayNames['ko-KR'],
@@ -228,7 +234,8 @@ const labels: Record<AppLanguage, MenuLabels> = {
     zoomOut: '축소',
     window: '윈도우',
     minimize: '최소화',
-    help: '도움말'
+    help: '도움말',
+    checkForUpdates: '업데이트 확인…'
   },
   'es-ES': {
     app: appDisplayNames['es-ES'],
@@ -260,7 +267,8 @@ const labels: Record<AppLanguage, MenuLabels> = {
     zoomOut: 'Reducir',
     window: 'Ventana',
     minimize: 'Minimizar',
-    help: 'Ayuda'
+    help: 'Ayuda',
+    checkForUpdates: 'Buscar actualizaciones…'
   },
   'pt-BR': {
     app: appDisplayNames['pt-BR'],
@@ -292,7 +300,8 @@ const labels: Record<AppLanguage, MenuLabels> = {
     zoomOut: 'Reduzir',
     window: 'Janela',
     minimize: 'Minimizar',
-    help: 'Ajuda'
+    help: 'Ajuda',
+    checkForUpdates: 'Buscar atualizações…'
   },
   ar: {
     app: appDisplayNames.ar,
@@ -324,7 +333,8 @@ const labels: Record<AppLanguage, MenuLabels> = {
     zoomOut: 'تصغير',
     window: 'نافذة',
     minimize: 'تصغير النافذة',
-    help: 'مساعدة'
+    help: 'مساعدة',
+    checkForUpdates: 'التحقق من وجود تحديثات…'
   }
 }
 
@@ -341,7 +351,10 @@ function navigationItems(text: MenuLabels): MenuItemConstructorOptions[] {
   ]
 }
 
-export function installApplicationMenu(language: AppLanguage): void {
+export function installApplicationMenu(
+  language: AppLanguage,
+  actions: { checkForUpdates: () => void }
+): void {
   const text = labels[language]
   const template: MenuItemConstructorOptions[] = []
 
@@ -350,6 +363,7 @@ export function installApplicationMenu(language: AppLanguage): void {
       label: text.app,
       submenu: [
         { label: text.about, click: () => app.showAboutPanel() },
+        { label: text.checkForUpdates, click: actions.checkForUpdates },
         { type: 'separator' },
         { label: text.services, role: 'services', submenu: [] },
         { type: 'separator' },
@@ -420,7 +434,11 @@ export function installApplicationMenu(language: AppLanguage): void {
       submenu:
         process.platform === 'darwin'
           ? []
-          : [{ label: text.about, click: () => app.showAboutPanel() }]
+          : [
+              { label: text.checkForUpdates, click: actions.checkForUpdates },
+              { type: 'separator' },
+              { label: text.about, click: () => app.showAboutPanel() }
+            ]
     }
   )
 

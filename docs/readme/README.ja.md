@@ -56,7 +56,7 @@ Agent アプリケーションは、Skills をそれぞれ異なるシステム�
 
 ## エコシステム対応
 
-Codex、Claude Code、Cursor、Gemini CLI、GitHub Copilot、OpenCode、OpenClaw、Hermes Agent、Kilo Code、Qoder、Qwen Code、Trae、Windsurf など、多数の Agent ツール向けディレクトリ規則を内蔵しています。メインライブラリには、ローカルで検出されたアプリと有効な Skill の場所だけが表示されます。その他のツールはカスタムルールで接続できます。
+Codex、DeepSeek Harness、Claude Code、Cursor、Gemini CLI、GitHub Copilot、OpenCode、OpenClaw、Hermes Agent、Kilo Code、Qoder、Qwen Code、Trae、Windsurf など、多数の Agent ツール向けディレクトリ規則を内蔵しています。メインライブラリには、ローカルで検出されたアプリと有効な Skill の場所だけが表示されます。その他のツールはカスタムルールで接続できます。
 
 マーケットプレイスには Anthropic、OpenAI、OpenClaw、Hermes、Vercel Labs、Hugging Face、NVIDIA、Tencent SkillHub、Red Skill、ModelScope Skills、ClawHub が含まれます。Git リポジトリ、ローカルディレクトリ、互換性のあるカスタムソースも追加できます。
 

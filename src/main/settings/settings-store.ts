@@ -48,6 +48,7 @@ export interface AppPreferences {
   themeMode: ThemeMode
   language: AppLanguagePreference
   autoScanOnStart: boolean
+  automaticUpdateChecks: boolean
 }
 
 interface SettingsData {
@@ -67,7 +68,8 @@ interface SettingsData {
 export const defaultAppPreferences: AppPreferences = {
   themeMode: 'system',
   language: 'zh-CN',
-  autoScanOnStart: true
+  autoScanOnStart: true,
+  automaticUpdateChecks: true
 }
 
 const defaultSettings: SettingsData = {
@@ -234,7 +236,11 @@ function normalizeAppPreferences(value: unknown): AppPreferences {
     autoScanOnStart:
       typeof input.autoScanOnStart === 'boolean'
         ? input.autoScanOnStart
-        : defaultAppPreferences.autoScanOnStart
+        : defaultAppPreferences.autoScanOnStart,
+    automaticUpdateChecks:
+      typeof input.automaticUpdateChecks === 'boolean'
+        ? input.automaticUpdateChecks
+        : defaultAppPreferences.automaticUpdateChecks
   }
 }
 

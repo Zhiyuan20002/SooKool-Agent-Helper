@@ -56,7 +56,7 @@ O aplicativo é focado no gerenciamento local de Agent Skills. Ele exibe apenas 
 
 ## Compatibilidade
 
-As regras integradas cobrem ferramentas como Codex, Claude Code, Cursor, Gemini CLI, GitHub Copilot, OpenCode, OpenClaw, Hermes Agent, Kilo Code, Qoder, Qwen Code, Trae e Windsurf. A biblioteca principal mostra apenas aplicativos e locais de Skills válidos detectados na máquina. Outras ferramentas podem ser conectadas por regras personalizadas.
+As regras integradas cobrem ferramentas como Codex, DeepSeek Harness, Claude Code, Cursor, Gemini CLI, GitHub Copilot, OpenCode, OpenClaw, Hermes Agent, Kilo Code, Qoder, Qwen Code, Trae e Windsurf. A biblioteca principal mostra apenas aplicativos e locais de Skills válidos detectados na máquina. Outras ferramentas podem ser conectadas por regras personalizadas.
 
 O marketplace inclui Anthropic, OpenAI, OpenClaw, Hermes, Vercel Labs, Hugging Face, NVIDIA, Tencent SkillHub, Red Skill, ModelScope Skills e ClawHub. Também é possível adicionar repositórios Git, diretórios locais e fontes personalizadas compatíveis.
 

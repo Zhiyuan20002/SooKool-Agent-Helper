@@ -1,6 +1,12 @@
 appId: com.sookool.agenthelper
 productName: SooKool Agent Helper
 
+publish:
+  provider: github
+  owner: Zhiyuan20002
+  repo: SooKool-Agent-Helper
+  releaseType: release
+
 directories:
   buildResources: build
   output: release
@@ -26,6 +32,15 @@ mac:
   forceCodeSigning: true
   hardenedRuntime: true
   notarize: true
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
   extendInfo:
     CFBundleDisplayName: SooKool 智能体助手
     CFBundleDevelopmentRegion: zh-Hans
@@ -42,7 +57,15 @@ mac:
 
 win:
   icon: icon.ico
-  target: nsis
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: true
+  perMachine: false
+  deleteAppDataOnUninstall: false
 
 linux:
   icon: icon.png

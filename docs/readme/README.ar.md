@@ -56,7 +56,7 @@
 
 ## دعم المنظومة
 
-تغطي القواعد المدمجة أدوات شائعة مثل Codex وClaude Code وCursor وGemini CLI وGitHub Copilot وOpenCode وOpenClaw وHermes Agent وKilo Code وQoder وQwen Code وTrae وWindsurf. لا تظهر في المكتبة الرئيسية إلا التطبيقات ومواقع المهارات الصالحة المكتشفة على جهازك. ويمكن ربط أدوات أخرى بقواعد مخصصة.
+تغطي القواعد المدمجة أدوات شائعة مثل Codex وDeepSeek Harness وClaude Code وCursor وGemini CLI وGitHub Copilot وOpenCode وOpenClaw وHermes Agent وKilo Code وQoder وQwen Code وTrae وWindsurf. لا تظهر في المكتبة الرئيسية إلا التطبيقات ومواقع المهارات الصالحة المكتشفة على جهازك. ويمكن ربط أدوات أخرى بقواعد مخصصة.
 
 يشمل السوق مصادر Anthropic وOpenAI وOpenClaw وHermes وVercel Labs وHugging Face وNVIDIA وTencent SkillHub وRed Skill وModelScope Skills وClawHub. كما يمكن إضافة مستودعات Git والمجلدات المحلية والمصادر المخصصة المتوافقة.
 

@@ -13,7 +13,7 @@ import {
   TextField,
   Tooltip
 } from '@heroui/react'
-import { AgentIcon, Antigravity, Qwen, agentMappings } from '@lobehub/icons'
+import { AgentIcon, Antigravity, DeepSeek, Qwen, agentMappings } from '@lobehub/icons'
 import {
   AlertTriangle,
   AppWindow,
@@ -27,6 +27,7 @@ import {
   CopyPlus,
   Cpu,
   Database,
+  Download,
   Eraser,
   File as FileIcon,
   FileCode2,
@@ -70,6 +71,9 @@ import type {
 } from '@/types/skills'
 import { SkillMarket } from './SkillEcosystem'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { LocalShare } from './local-share/LocalShare'
+import { softwareUpdateCopy } from '@/update-copy'
+import type { UpdatePhase } from '../../../shared/update-types'
 
 const skillMarkdownPath = 'SKILL.md'
 
@@ -83,6 +87,7 @@ function useTranslator(): (
 
 export function SkillLibrary({ view }: { view: ViewType }): React.JSX.Element {
   if (view === 'market') return <SkillMarket />
+  if (view === 'local-share') return <LocalShare />
   if (view === 'settings') return <SettingsView scope="general" />
   if (view === 'skill-settings') return <SettingsView scope="skills" />
   return <SkillsView />
@@ -114,7 +119,8 @@ function SkillsView(): React.JSX.Element {
     deleteSelectedSkill,
     revealSelectedSkill,
     clearError,
-    setCurrentView
+    setCurrentView,
+    setLocalShareDraftSkillPath
   } = useAppStore()
 
   const [applying, setApplying] = useState(false)
@@ -395,6 +401,17 @@ function SkillsView(): React.JSX.Element {
                   )}
                 </div>
                 <div className="detail-actions">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onPress={() => {
+                      setLocalShareDraftSkillPath(selectedSkill.path)
+                      setCurrentView('local-share')
+                    }}
+                  >
+                    <Share2 size={15} />
+                    {t('nav.localShare')}
+                  </Button>
                   <Button
                     className={applying ? 'transfer-mode-button active' : 'transfer-mode-button'}
                     size="sm"
@@ -1098,7 +1115,7 @@ function SkillListItem({
   )
 }
 
-type SettingsSectionId = 'general' | 'resources' | 'applications' | 'projects' | 'backups'
+type SettingsSectionId = 'general' | 'updates' | 'resources' | 'applications' | 'projects' | 'backups'
 
 function SettingsView({ scope }: { scope: 'general' | 'skills' }): React.JSX.Element {
   const t = useTranslator()
@@ -1110,6 +1127,7 @@ function SettingsView({ scope }: { scope: 'general' | 'skills' }): React.JSX.Ele
     skills,
     preferences,
     appMetrics,
+    updateState,
     projectDiscovery,
     projectScanRoots,
     projectScanRunning,
@@ -1118,6 +1136,8 @@ function SettingsView({ scope }: { scope: 'general' | 'skills' }): React.JSX.Ele
     saveApplicationRule,
     removeApplicationRule,
     loadAppMetrics,
+    checkForUpdates,
+    installUpdate,
     updatePreferences,
     refreshSkills,
     cancelProjectScan,
@@ -1135,18 +1155,20 @@ function SettingsView({ scope }: { scope: 'general' | 'skills' }): React.JSX.Ele
   const existingRoots = skillRoots.filter((root) => root.exists)
   const language = resolveAppLanguage(preferences.language)
   const topologyCopy = skillTopologyCopy(t)
+  const updateCopy = softwareUpdateCopy(language)
   const allSettingsSections: Array<{
     id: SettingsSectionId
     label: string
     icon: React.ElementType
   }> = [
     { id: 'general', label: t('settings.tabs.general'), icon: SlidersHorizontal },
+    { id: 'updates', label: updateCopy.tab, icon: Download },
     { id: 'resources', label: t('settings.tabs.resources'), icon: HardDrive },
     { id: 'applications', label: topologyCopy.applications, icon: AppWindow },
     { id: 'projects', label: topologyCopy.projects, icon: FolderSearch },
     { id: 'backups', label: t('settings.tabs.backups'), icon: ArchiveRestore }
   ]
-  const settingsSections = allSettingsSections.filter((section) => scope === 'general' ? section.id === 'general' || section.id === 'resources' : section.id === 'applications' || section.id === 'projects' || section.id === 'backups')
+  const settingsSections = allSettingsSections.filter((section) => scope === 'general' ? section.id === 'general' || section.id === 'updates' || section.id === 'resources' : section.id === 'applications' || section.id === 'projects' || section.id === 'backups')
 
   useEffect(() => setActiveSection(scope === 'general' ? 'general' : 'applications'), [scope])
 
@@ -1428,6 +1450,45 @@ function SettingsView({ scope }: { scope: 'general' | 'skills' }): React.JSX.Ele
             </div>
           )}
 
+          {activeSection === 'updates' && (
+            <div className="settings-section software-update-section">
+              <div className="settings-section-heading"><div><h3>{updateCopy.title}</h3><p>{updateCopy.description}</p></div></div>
+              <SettingsControlRow
+                icon={RefreshCw}
+                title={updateCopy.automatic}
+                description={updateCopy.automaticDescription}
+                control={
+                  <Tabs className="settings-auto-scan-tabs" aria-label={updateCopy.automatic} selectedKey={preferences.automaticUpdateChecks ? 'on' : 'off'} onSelectionChange={(key) => void updatePreferences({ automaticUpdateChecks: key === 'on' })}>
+                    <Tabs.ListContainer><Tabs.List>
+                      <Tabs.Tab id="on">{t('settings.status.on')}<Tabs.Indicator /></Tabs.Tab>
+                      <Tabs.Tab id="off">{t('settings.status.off')}<Tabs.Indicator /></Tabs.Tab>
+                    </Tabs.List></Tabs.ListContainer>
+                  </Tabs>
+                }
+              />
+              <div className="software-update-card" data-phase={updateState.phase} aria-live="polite">
+                <div className="software-update-card-main">
+                  <span className="software-update-status-icon" aria-hidden="true"><UpdateStatusIcon phase={updateState.phase} /></span>
+                  <div>
+                    <strong>{updateStatusLabel(updateState.phase, updateState.availableVersion, updateCopy.status)}</strong>
+                    <p>{updateState.phase === 'error' && updateState.errorCode ? updateCopy.errors[updateState.errorCode] : `${updateCopy.currentVersion} ${updateState.currentVersion}`}</p>
+                  </div>
+                </div>
+                {updateState.phase === 'downloading' && <div className="software-update-progress">
+                  <div className="software-update-progress-copy"><span>{Math.round(updateState.progressPercent ?? 0)}%</span><span>{formatBytes(updateState.transferredBytes ?? 0)} / {formatBytes(updateState.totalBytes ?? 0)}</span></div>
+                  <div className="software-update-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(updateState.progressPercent ?? 0)}><span style={{ width: `${updateState.progressPercent ?? 0}%` }} /></div>
+                </div>}
+                <div className="software-update-actions">
+                  {updateState.phase === 'downloaded' ? (
+                    <Button size="sm" variant="primary" onPress={() => void installUpdate()}><RefreshCw size={15} />{updateCopy.install}</Button>
+                  ) : (
+                    <Button size="sm" variant="secondary" isPending={updateState.phase === 'checking'} isDisabled={updateState.phase === 'disabled' || updateState.phase === 'downloading' || updateState.phase === 'installing'} onPress={() => void checkForUpdates()}>{updateState.phase === 'checking' ? updateCopy.checkingButton : updateCopy.check}</Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeSection === 'applications' && (
             <div className="settings-section settings-section-scroll">
               <div className="settings-section-heading">
@@ -1560,6 +1621,18 @@ function SettingsControlRow({
   )
 }
 
+function UpdateStatusIcon({ phase }: { phase: UpdatePhase }): React.JSX.Element {
+  if (phase === 'downloaded' || phase === 'up-to-date') return <Check size={19} />
+  if (phase === 'error') return <AlertTriangle size={18} />
+  if (phase === 'checking' || phase === 'available' || phase === 'downloading' || phase === 'installing') return <RefreshCw className="software-update-spinning" size={18} />
+  return <Download size={18} />
+}
+
+function updateStatusLabel(phase: UpdatePhase, availableVersion: string | null, labels: Record<UpdatePhase, string>): string {
+  const label = labels[phase]
+  return availableVersion && ['available', 'downloading', 'downloaded'].includes(phase) ? `${label} · ${availableVersion}` : label
+}
+
 function ResourceMetric({ label, value }: { label: string; value: string }): React.JSX.Element {
   return (
     <div className="resource-metric">
@@ -1669,6 +1742,7 @@ function renderApplicationIcon(
   size: number
 ): React.JSX.Element | null {
   const text = candidates.flat().filter((candidate): candidate is string => Boolean(candidate)).join(' ').toLowerCase()
+  if (text.includes('deepseek')) return <DeepSeek.Color size={size} />
   if (text.includes('lingma')) return <AgentIcon agent="qoder" size={size} type="color" />
   if (text.includes('iflow')) return <Qwen.Color size={size} />
   if (text.includes('antigravity')) return <Antigravity.Color size={size} />
